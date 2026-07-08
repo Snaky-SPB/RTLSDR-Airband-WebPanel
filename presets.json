@@ -1,0 +1,30 @@
+[
+  {
+    "name": "Mobile 172-173",
+    "type": "rtlsdr",
+    "serial": "00000102",
+    "gain": 15.7,
+    "sample_rate": 2.54,
+    "startfreq": 172.0,
+    "stopfreq": 173.0,
+    "step": 0.0125,
+    "mp3outdir": "/media/rx/sources",
+    "scan_fname": "SCAN-mobile",
+    "white_list": {},
+    "black_list": []
+  },
+  {
+    "name": "Mobile 148-149",
+    "type": "rtlsdr",
+    "serial": "00000102",
+    "gain": 15.7,
+    "sample_rate": 2.54,
+    "startfreq": 148.0,
+    "stopfreq": 149.0,
+    "step": 0.0125,
+    "mp3outdir": "/media/rx/sources",
+    "scan_fname": "SCAN-mobile",
+    "white_list": {},
+    "black_list": []
+  }
+]

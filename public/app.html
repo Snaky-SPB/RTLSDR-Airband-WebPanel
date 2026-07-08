@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radio Scanner</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 8px;
+        }
+
+        .bar {
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .top-bar { margin-bottom: 10px; }
+
+        .bottom-bar {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #555;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .scanner-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-dot.running { background: #43a047; }
+        .status-dot.stopped { background: #e53935; }
+        .status-dot.error { background: #fb8c00; }
+
+        .scanner-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .scanner-actions button {
+            border: none;
+            border-radius: 6px;
+            background: #f0f0f0;
+            cursor: pointer;
+            padding: 6px 12px;
+            font-size: 13px;
+            transition: background 0.15s;
+        }
+
+        .scanner-actions button:hover { background: #e0e0e0; }
+        .scanner-actions .btn-stop-restart { color: #e53935; }
+        .scanner-actions .btn-start { color: #43a047; }
+
+        .preset-section {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .preset-section select {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fff;
+            padding: 5px 8px;
+            font-size: 13px;
+            cursor: pointer;
+            max-width: 180px;
+        }
+
+        .preset-section .btn-icon {
+            border: none;
+            border-radius: 6px;
+            background: #f0f0f0;
+            cursor: pointer;
+            padding: 5px 10px;
+            font-size: 16px;
+            transition: background 0.15s;
+            line-height: 1;
+        }
+
+        .preset-section .btn-icon:hover { background: #e0e0e0; }
+        .preset-section .btn-apply { color: #1565c0; }
+        .preset-section .btn-add { color: #43a047; }
+
+        .bottom-bar .sep { color: #ddd; }
+
+        .frequency-panel {
+            background: #fff;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            padding: 10px 12px;
+        }
+
+        .controls-row {
+            display: flex;
+            align-items: stretch;
+            gap: 6px;
+        }
+
+        .controls-row button {
+            border: none;
+            border-radius: 50%;
+            background: #f0f0f0;
+            cursor: pointer;
+            padding: 0;
+            font-size: 16px;
+            transition: background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            flex-shrink: 0;
+        }
+
+        .controls-row button:hover { background: #e0e0e0; }
+
+        .btn-group {
+            display: flex;
+            align-items: center;
+            background: #f5f5f5;
+            border-radius: 999px;
+            padding: 3px;
+            gap: 2px;
+            flex-shrink: 0;
+        }
+
+        .btn-group button {
+            background: transparent !important;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            font-size: 14px;
+            line-height: 1;
+        }
+
+        .btn-group button:hover {
+            background: rgba(0,0,0,0.08) !important;
+        }
+
+        .btn-delete { color: #c62828; }
+        .btn-whitelist { color: #2e7d32; }
+        .btn-blacklist { color: #e65100; }
+
+        .audio-wrapper {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .audio-wrapper audio {
+            width: 100%;
+            height: 38px;
+            display: block;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+            gap: 12px;
+        }
+
+        .info-left {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .info-right {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: right;
+        }
+
+        .flash-toast {
+            position: fixed;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            z-index: 100;
+        }
+        .flash-toast.show { opacity: 1; }
+
+        @media (max-width: 600px) {
+            .controls-row { gap: 4px; }
+            .controls-row button { width: 34px; height: 34px; font-size: 14px; }
+            .btn-group { padding: 2px; gap: 1px; }
+            .btn-group button { width: 30px; height: 30px; font-size: 13px; }
+            .audio-wrapper audio { height: 34px; }
+            .frequency-panel { padding: 8px 10px; }
+            .info-row { font-size: 11px; margin-top: 4px; gap: 8px; }
+            .bar { padding: 8px 10px; }
+            .bottom-bar { font-size: 12px; gap: 10px; }
+            .scanner-status { font-size: 13px; }
+            .scanner-actions button { padding: 4px 8px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="bar top-bar">
+            <div class="scanner-status">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="status-text">Scanner</span>
+            </div>
+            <div class="preset-section">
+                <select id="preset-select"><option value="">— Preset —</option></select>
+                <button class="btn-icon btn-add" id="btn-preset-add" title="Add preset">+</button>
+                <button class="btn-icon btn-apply" id="btn-preset-apply" title="Apply preset">&#10003;</button>
+            </div>
+            <div class="scanner-actions">
+                <button class="btn-stop-restart" id="btn-restart" title="Restart">⟳ Restart</button>
+                <button class="btn-stop-restart" id="btn-stop" title="Stop">■ Stop</button>
+                <button class="btn-start" id="btn-start" title="Start">▶ Start</button>
+            </div>
+        </div>
+
+        <div id="panels"></div>
+
+        <div class="bar bottom-bar" id="bottom-bar">
+            <span id="bottom-records">Записей: —</span>
+            <span class="sep">|</span>
+            <span id="bottom-disk">Диск: —</span>
+            <span class="sep">|</span>
+            <span id="bottom-uptime">Uptime: —</span>
+        </div>
+
+        <div class="flash-toast" id="toast"></div>
+    </div>
+
+    <script>
+        const panels = document.getElementById('panels');
+        const toast = document.getElementById('toast');
+        let toastTimer = null;
+
+        function showToast(msg) {
+            toast.textContent = msg;
+            toast.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        let totalRecordings = 0;
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/system/status');
+                const json = await res.json();
+                const d = json.data;
+
+                const dot = document.getElementById('status-dot');
+                const text = document.getElementById('status-text');
+                const running = d.scanner && d.scanner.running;
+                dot.className = 'status-dot ' + (running ? 'running' : 'stopped');
+                text.textContent = running ? 'Scan running' : 'Scan stopped';
+
+                if (d.disk) {
+                    document.getElementById('bottom-disk').textContent =
+                        'Диск: ' + d.disk.free + ' / ' + d.disk.total;
+                }
+                if (d.uptime) {
+                    document.getElementById('bottom-uptime').textContent = 'Uptime: ' + d.uptime;
+                }
+            } catch (e) {}
+        }
+
+        function updateRecords(count) {
+            document.getElementById('bottom-records').textContent = 'Записей: ' + count;
+        }
+
+        async function scannerAction(action) {
+            try {
+                await fetch('/api/system/scanner/' + action, { method: 'POST' });
+                setTimeout(fetchStatus, 500);
+            } catch (e) {}
+        }
+
+        document.getElementById('btn-restart').onclick = () => scannerAction('restart');
+        document.getElementById('btn-stop').onclick = () => scannerAction('stop');
+        document.getElementById('btn-start').onclick = () => scannerAction('start');
+
+        const presetSelect = document.getElementById('preset-select');
+
+        async function loadPresets() {
+            try {
+                const res = await fetch('/api/presets');
+                const json = await res.json();
+                const presets = json.data || [];
+                const active = json.active;
+                presetSelect.innerHTML = '<option value="">— Preset —</option>';
+                let foundActive = false;
+                for (const p of presets) {
+                    const opt = document.createElement('option');
+                    opt.value = p.name;
+                    opt.textContent = p.name;
+                    if (p.name === active) {
+                        opt.selected = true;
+                        foundActive = true;
+                    }
+                    presetSelect.appendChild(opt);
+                }
+                if (active && !foundActive) {
+                    const opt = document.createElement('option');
+                    opt.value = '__current__';
+                    opt.textContent = active + ' (current)';
+                    opt.selected = true;
+                    opt.disabled = true;
+                    presetSelect.appendChild(opt);
+                }
+            } catch (e) {}
+        }
+
+        document.getElementById('btn-preset-apply').onclick = async () => {
+            const name = presetSelect.value;
+            if (!name) return;
+            try {
+                const res = await fetch('/api/presets/' + encodeURIComponent(name) + '/apply', { method: 'POST' });
+                const json = await res.json();
+                if (json.success) {
+                    showToast('Preset applied: ' + name);
+                    setTimeout(loadPresets, 500);
+                    setTimeout(fetchStatus, 1000);
+                } else {
+                    alert('Failed: ' + (json.error || 'unknown error'));
+                }
+            } catch (e) {
+                alert('Network error');
+            }
+        };
+
+        document.getElementById('btn-preset-add').onclick = async () => {
+            const name = prompt('Preset name:');
+            if (!name) return;
+            const startfreq = prompt('Start frequency (MHz):', '172.0');
+            if (!startfreq) return;
+            const stopfreq = prompt('Stop frequency (MHz):', '173.0');
+            if (!stopfreq) return;
+            const step = prompt('Step (MHz):', '0.0125');
+            if (!step) return;
+
+            const preset = {
+                name: name,
+                type: 'rtlsdr',
+                serial: '00000102',
+                gain: 15.7,
+                sample_rate: 2.54,
+                startfreq: parseFloat(startfreq),
+                stopfreq: parseFloat(stopfreq),
+                step: parseFloat(step),
+                mp3outdir: '/media/rx/sources',
+                scan_fname: 'SCAN',
+                white_list: {},
+                black_list: []
+            };
+
+            try {
+                const res = await fetch('/api/presets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(preset)
+                });
+                const json = await res.json();
+                if (json.success) {
+                    showToast('Preset created: ' + name);
+                    loadPresets();
+                } else {
+                    alert('Failed: ' + (json.error || 'unknown error'));
+                }
+            } catch (e) {
+                alert('Network error');
+            }
+        };
+
+        async function init() {
+            fetchStatus();
+            setInterval(fetchStatus, 5000);
+            loadPresets();
+
+            try {
+                const freqRes = await fetch('/api/frequencies');
+                const freqData = await freqRes.json();
+                const frequencies = freqData.data || [];
+
+                let totalFiles = 0;
+
+                for (const item of frequencies) {
+                    const freq = item.frequency;
+                    const receiver = item.receiver;
+                    const mhzVal = (freq / 1000000);
+                    const mhz = mhzVal.toFixed(4) + ' MHz';
+                    const freqMhz = mhzVal.toFixed(4);
+
+                    const panel = document.createElement('div');
+                    panel.className = 'frequency-panel';
+
+                    panel.innerHTML = `
+                        <div class="controls-row">
+                            <div class="btn-group">
+                                <button class="btn-prev" title="Previous">&#9198;</button>
+                                <button class="btn-next" title="Next">&#9197;</button>
+                            </div>
+                            <div class="audio-wrapper"><audio controls></audio></div>
+                            <div class="btn-group">
+                                <button class="btn-delete" title="Delete">&#128465;</button>
+                                <button class="btn-whitelist" title="Whitelist &#8594; preset">&#8853;</button>
+                                <button class="btn-blacklist" title="Blacklist &#8594; preset">&#8854;</button>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-left">${mhz} <span style="color:#999">(${receiver})</span></span>
+                            <span class="info-right"></span>
+                        </div>
+                    `;
+
+                    panels.appendChild(panel);
+
+                    const audio = panel.querySelector('audio');
+                    const btnPrev = panel.querySelector('.btn-prev');
+                    const btnNext = panel.querySelector('.btn-next');
+                    const btnDelete = panel.querySelector('.btn-delete');
+                    const btnWhitelist = panel.querySelector('.btn-whitelist');
+                    const btnBlacklist = panel.querySelector('.btn-blacklist');
+                    const infoRight = panel.querySelector('.info-right');
+
+                    let files = [];
+                    let currentIdx = 0;
+
+                    function setFile(file) {
+                        audio.src = '/api/files/' + file.filename + '/stream';
+                        audio.load();
+                        audio.play();
+                        infoRight.textContent = file.filename;
+                    }
+
+                    audio.onended = () => {
+                        if (currentIdx < files.length - 1) {
+                            setFile(files[++currentIdx]);
+                        }
+                    };
+
+                    btnPrev.onclick = () => {
+                        if (currentIdx > 0) {
+                            setFile(files[--currentIdx]);
+                        }
+                    };
+
+                    btnNext.onclick = () => {
+                        if (currentIdx < files.length - 1) {
+                            setFile(files[++currentIdx]);
+                        }
+                    };
+
+                    async function deleteAndRefresh() {
+                        if (!files.length) return;
+                        try {
+                            await fetch(`/api/frequencies/${freq}/${receiver}/delete`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({})
+                            });
+                            const res = await fetch(`/api/frequencies/${freq}/${receiver}`);
+                            const data = await res.json();
+                            const oldCount = files.length;
+                            files = data.data ? data.data.files || [] : data.files || [];
+                            totalFiles -= (oldCount - files.length);
+                            updateRecords(totalFiles);
+                            currentIdx = 0;
+                            if (files.length > 0) {
+                                setFile(files[0]);
+                            } else {
+                                audio.removeAttribute('src');
+                                audio.load();
+                                infoRight.textContent = '';
+                                panel.style.display = 'none';
+                            }
+                        } catch (e) {}
+                    }
+
+                    btnDelete.onclick = deleteAndRefresh;
+
+                    btnWhitelist.onclick = async () => {
+                        const name = presetSelect.value;
+                        if (!name) { showToast('Select a preset first'); return; }
+                        if (!files.length) return;
+                        const label = prompt('Label for ' + freqMhz + ':');
+                        if (label === null) return;
+                        try {
+                            const res = await fetch(`/api/presets/${encodeURIComponent(name)}/whitelist`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ freq: freqMhz, label: label || freqMhz })
+                            });
+                            const json = await res.json();
+                            if (json.success) {
+                                showToast(freqMhz + ' added to whitelist');
+                                await deleteAndRefresh();
+                            } else {
+                                showToast('Error: ' + (json.error || 'unknown'));
+                            }
+                        } catch (e) {
+                            showToast('Network error');
+                        }
+                    };
+
+                    btnBlacklist.onclick = async () => {
+                        const name = presetSelect.value;
+                        if (!name) { showToast('Select a preset first'); return; }
+                        if (!files.length) return;
+                        if (!confirm('Add ' + freqMhz + ' to blacklist and delete recordings?')) return;
+                        try {
+                            const res = await fetch(`/api/presets/${encodeURIComponent(name)}/blacklist`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ freq: freqMhz })
+                            });
+                            const json = await res.json();
+                            if (json.success) {
+                                showToast(freqMhz + ' added to blacklist');
+                                await deleteAndRefresh();
+                            } else {
+                                showToast('Error: ' + (json.error || 'unknown'));
+                            }
+                        } catch (e) {
+                            showToast('Network error');
+                        }
+                    };
+
+                    async function loadFiles() {
+                        try {
+                            const res = await fetch(`/api/frequencies/${freq}/${receiver}`);
+                            const data = await res.json();
+                            files = data.data ? data.data.files || [] : data.files || [];
+                            totalFiles += files.length;
+                            updateRecords(totalFiles);
+                            if (files.length > 0) {
+                                currentIdx = 0;
+                                setFile(files[0]);
+                            }
+                        } catch (e) {}
+                    }
+
+                    loadFiles();
+                }
+
+                if (totalFiles === 0) updateRecords(0);
+            } catch (e) {
+                panels.innerHTML = '<p style="color:#c62828;padding:20px">Failed to load frequencies</p>';
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

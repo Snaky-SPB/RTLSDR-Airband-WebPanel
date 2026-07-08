@@ -1,0 +1,12 @@
+/vendor/
+/composer.lock
+/public/assets/*
+!public/assets/.gitkeep
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+config/local.php
+wiki/raw-sessions/
