@@ -61,13 +61,11 @@ if [ -d "$SOURCE_DIR" ]; then
         --exclude='var/' \
         --exclude='.git/' \
         --exclude='node_modules/' \
-        --exclude='presets.json' \
+        --exclude='presets/' \
         "$SOURCE_DIR/" "$APP_DIR/"
     echo "  Файлы скопированы из $SOURCE_DIR"
-    if [ -f "$SOURCE_DIR/presets.json" ] && [ ! -f "$APP_DIR/presets.json" ]; then
-        cp "$SOURCE_DIR/presets.json" "$APP_DIR/presets.json"
-        echo "  presets.json создан (seed)"
-    fi
+    mkdir -p "$APP_DIR/presets"
+    echo "  Каталог presets/ готов"
 else
     echo "  WARNING: Исходный каталог $SOURCE_DIR не найден, пропускаем"
 fi

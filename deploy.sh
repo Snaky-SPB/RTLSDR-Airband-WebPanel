@@ -39,13 +39,11 @@ rsync -a --delete \
     --exclude='var/' \
     --exclude='.git/' \
     --exclude='node_modules/' \
-    --exclude='presets.json' \
+    --exclude='presets/' \
     "$SOURCE_DIR/" "$APP_DIR/"
 
-# Seed presets.json если ещё нет
-if [ -f "$SOURCE_DIR/presets.json" ] && [ ! -f "$APP_DIR/presets.json" ]; then
-    cp "$SOURCE_DIR/presets.json" "$APP_DIR/presets.json"
-fi
+# Каталог presets/ если ещё нет
+mkdir -p "$APP_DIR/presets"
 
 # Права
 echo "Setting permissions..."

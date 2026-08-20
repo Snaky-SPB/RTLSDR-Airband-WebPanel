@@ -8,18 +8,22 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use RadioScanner\Services\ScannerStatusService;
 use RadioScanner\Services\SystemInfoService;
+use RadioScanner\Services\ConfigGeneratorService;
 
 class SystemHandler
 {
     private ScannerStatusService $statusService;
     private SystemInfoService $infoService;
+    private ConfigGeneratorService $generator;
 
     public function __construct(
         ScannerStatusService $statusService,
-        SystemInfoService $infoService
+        SystemInfoService $infoService,
+        ConfigGeneratorService $generator
     ) {
         $this->statusService = $statusService;
         $this->infoService = $infoService;
+        $this->generator = $generator;
     }
 
     /**
@@ -38,6 +42,7 @@ class SystemHandler
                 'scanner' => [
                     'running' => $scannerRunning,
                     'status' => $scannerRunning ? 'running' : 'stopped',
+                    'mode' => $this->generator->getActiveMode(),
                 ],
                 'disk' => [
                     'total' => $this->formatBytes($diskUsage['total']),

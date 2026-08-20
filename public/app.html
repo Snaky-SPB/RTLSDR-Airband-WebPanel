@@ -29,7 +29,10 @@
             gap: 12px;
         }
 
-        .top-bar { margin-bottom: 10px; }
+        .top-bar {
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
 
         .bottom-bar {
             margin-top: 10px;
@@ -105,8 +108,74 @@
         }
 
         .preset-section .btn-icon:hover { background: #e0e0e0; }
-        .preset-section .btn-apply { color: #1565c0; }
         .preset-section .btn-add { color: #43a047; }
+
+        .btn-apply-mode {
+            border: none;
+            border-radius: 6px;
+            background: #e3f2fd;
+            color: #1565c0;
+            cursor: pointer;
+            padding: 5px 10px;
+            font-size: 13px;
+            font-weight: 500;
+            transition: background 0.15s;
+        }
+
+        .btn-apply-mode:hover { background: #bbdefb; }
+        .btn-apply-mode:disabled { opacity: 0.5; cursor: default; }
+
+        .worklist-bar {
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #555;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .worklist-title { font-weight: 500; }
+
+        .worklist-item {
+            background: #f5f5f5;
+            border-radius: 6px;
+            padding: 3px 8px;
+            white-space: nowrap;
+        }
+
+        .worklist-del {
+            border: none;
+            background: transparent;
+            color: #c62828;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0 2px;
+        }
+
+        .worklist-add {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .worklist-add input {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 3px 6px;
+            font-size: 13px;
+        }
+
+        .worklist-add button {
+            border: none;
+            border-radius: 6px;
+            background: #e8f5e9;
+            color: #2e7d32;
+            cursor: pointer;
+            padding: 4px 10px;
+            font-size: 13px;
+        }
+
+        .worklist-add button:hover { background: #c8e6c9; }
 
         .bottom-bar .sep { color: #ddd; }
 
@@ -166,7 +235,6 @@
 
         .btn-delete { color: #c62828; }
         .btn-whitelist { color: #2e7d32; }
-        .btn-blacklist { color: #e65100; }
 
         .audio-wrapper {
             flex: 1;
@@ -237,25 +305,32 @@
 <body>
     <div class="container">
         <div class="bar top-bar">
-            <div class="scanner-status">
-                <span class="status-dot" id="status-dot"></span>
-                <span id="status-text">Scanner</span>
-            </div>
             <div class="preset-section">
                 <select id="preset-select"><option value="">— Preset —</option></select>
                 <button class="btn-icon btn-add" id="btn-preset-add" title="Add preset">+</button>
-                <button class="btn-icon btn-apply" id="btn-preset-apply" title="Apply preset">&#10003;</button>
-            </div>
-            <div class="scanner-actions">
-                <button class="btn-stop-restart" id="btn-restart" title="Restart">⟳ Restart</button>
-                <button class="btn-stop-restart" id="btn-stop" title="Stop">■ Stop</button>
-                <button class="btn-start" id="btn-start" title="Start">▶ Start</button>
+                <button class="btn-apply-mode" id="btn-apply-mode" data-mode="scan" title="Apply selected preset">to scan</button>
             </div>
         </div>
 
+        <div class="bar worklist-bar" id="worklist-bar" style="display:none">
+            <span class="worklist-title">Рабочие частоты (Receive):</span>
+            <span id="worklist-items"></span>
+            <span class="worklist-add">
+                <input id="worklist-freq" placeholder="MHz" size="9">
+                <input id="worklist-label" placeholder="label" size="9">
+                <button id="btn-worklist-add">Add</button>
+            </span>
+        </div>
+
         <div id="panels"></div>
+        <p id="no-files-for-preset" style="display:none;color:#757575;text-align:center;padding:20px"></p>
 
         <div class="bar bottom-bar" id="bottom-bar">
+            <span class="scanner-status">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="status-text">Scanner</span>
+            </span>
+            <span class="sep">|</span>
             <span id="bottom-records">Записей: —</span>
             <span class="sep">|</span>
             <span id="bottom-disk">Диск: —</span>
@@ -279,6 +354,23 @@
         }
 
         let totalRecordings = 0;
+        let activePreset = null;
+        let activeMode = null;
+
+        function updateModeButton() {
+            const btn = document.getElementById('btn-apply-mode');
+            const toReceive = activeMode === 'wideband_scan'
+                && presetSelect.value !== ''
+                && presetSelect.value === activePreset;
+            btn.dataset.mode = toReceive ? 'receive' : 'scan';
+            btn.textContent = toReceive ? 'to receive' : 'to scan';
+        }
+
+        function stopOtherAudio(current) {
+            panels.querySelectorAll('audio').forEach(a => {
+                if (a !== current) a.pause();
+            });
+        }
 
         async function fetchStatus() {
             try {
@@ -289,8 +381,15 @@
                 const dot = document.getElementById('status-dot');
                 const text = document.getElementById('status-text');
                 const running = d.scanner && d.scanner.running;
+                const mode = d.scanner && d.scanner.mode;
                 dot.className = 'status-dot ' + (running ? 'running' : 'stopped');
-                text.textContent = running ? 'Scan running' : 'Scan stopped';
+                let txt = running ? 'Running' : 'Stopped';
+                if (mode) {
+                    activeMode = mode;
+                    txt += ' · ' + (mode === 'wideband_scan' ? 'scan' : mode === 'multichannel' ? 'receive' : mode);
+                }
+                text.textContent = txt;
+                updateModeButton();
 
                 if (d.disk) {
                     document.getElementById('bottom-disk').textContent =
@@ -306,18 +405,8 @@
             document.getElementById('bottom-records').textContent = 'Записей: ' + count;
         }
 
-        async function scannerAction(action) {
-            try {
-                await fetch('/api/system/scanner/' + action, { method: 'POST' });
-                setTimeout(fetchStatus, 500);
-            } catch (e) {}
-        }
-
-        document.getElementById('btn-restart').onclick = () => scannerAction('restart');
-        document.getElementById('btn-stop').onclick = () => scannerAction('stop');
-        document.getElementById('btn-start').onclick = () => scannerAction('start');
-
         const presetSelect = document.getElementById('preset-select');
+        let currentPresets = [];
 
         async function loadPresets() {
             try {
@@ -325,6 +414,9 @@
                 const json = await res.json();
                 const presets = json.data || [];
                 const active = json.active;
+                currentPresets = presets;
+                activePreset = active || null;
+                if (json.mode) activeMode = json.mode;
                 presetSelect.innerHTML = '<option value="">— Preset —</option>';
                 let foundActive = false;
                 for (const p of presets) {
@@ -345,17 +437,102 @@
                     opt.disabled = true;
                     presetSelect.appendChild(opt);
                 }
+                loadWorklist(presetSelect.value);
+                updateModeButton();
+                applyPresetFilter();
             } catch (e) {}
         }
 
-        document.getElementById('btn-preset-apply').onclick = async () => {
+        presetSelect.onchange = () => {
+            loadWorklist(presetSelect.value);
+            updateModeButton();
+            applyPresetFilter();
+        };
+
+        function loadWorklist(name) {
+            const bar = document.getElementById('worklist-bar');
+            const items = document.getElementById('worklist-items');
+            items.innerHTML = '';
+            if (!name) { bar.style.display = 'none'; return; }
+            const preset = currentPresets.find(p => p.name === name);
+            if (!preset) { bar.style.display = 'none'; return; }
+            const list = preset.work_list || {};
+            const keys = Object.keys(list).sort();
+            bar.style.display = 'flex';
+            for (const f of keys) {
+                const item = document.createElement('span');
+                item.className = 'worklist-item';
+                item.innerHTML = f + ' <b>' + list[f] + '</b> <button class="worklist-del" data-freq="' + f + '" title="Remove">&#215;</button>';
+                item.querySelector('button').onclick = async () => {
+                    try {
+                        const res = await fetch('/api/presets/' + encodeURIComponent(name) + '/worklist/remove', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ freq: f })
+                        });
+                        const json = await res.json();
+                        if (json.success) {
+                            loadPresets();
+                        } else {
+                            showToast('Error: ' + (json.error || 'unknown'));
+                        }
+                    } catch (e) {}
+                };
+                items.appendChild(item);
+            }
+        }
+
+        function applyPresetFilter() {
+            const preset = currentPresets.find(p => p.name === presetSelect.value);
+            const prefix = preset ? preset.scan_fname : null;
+            let visible = 0;
+            panels.querySelectorAll('.frequency-panel').forEach(p => {
+                const show = (!prefix || p.dataset.receiver === prefix) && !p.dataset.empty;
+                p.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+            const msg = document.getElementById('no-files-for-preset');
+            if (msg) {
+                if (prefix) msg.textContent = 'Нет записей для пресета «' + preset.name + '»';
+                msg.style.display = (prefix && visible === 0) ? 'block' : 'none';
+            }
+        }
+
+        document.getElementById('btn-worklist-add').onclick = async () => {
             const name = presetSelect.value;
-            if (!name) return;
+            if (!name) { showToast('Select a preset first'); return; }
+            const freq = document.getElementById('worklist-freq').value.trim();
+            const label = document.getElementById('worklist-label').value.trim();
+            if (!freq) return;
             try {
-                const res = await fetch('/api/presets/' + encodeURIComponent(name) + '/apply', { method: 'POST' });
+                const res = await fetch('/api/presets/' + encodeURIComponent(name) + '/worklist', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ freq: freq, label: label || 'marked' })
+                });
                 const json = await res.json();
                 if (json.success) {
-                    showToast('Preset applied: ' + name);
+                    document.getElementById('worklist-freq').value = '';
+                    document.getElementById('worklist-label').value = '';
+                    loadPresets();
+                } else {
+                    showToast('Error: ' + (json.error || 'unknown'));
+                }
+            } catch (e) {
+                showToast('Network error');
+            }
+        };
+
+        async function applyMode(mode) {
+            const name = presetSelect.value;
+            if (!name) return;
+            const btn = document.getElementById('btn-apply-mode');
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/presets/' + encodeURIComponent(name) + '/apply-' + mode, { method: 'POST' });
+                const json = await res.json();
+                if (json.success) {
+                    showToast('Applied: ' + name + ' (' + (mode === 'scan' ? 'scan' : 'receive') + ')');
                     setTimeout(loadPresets, 500);
                     setTimeout(fetchStatus, 1000);
                 } else {
@@ -364,31 +541,41 @@
             } catch (e) {
                 alert('Network error');
             }
+            btn.disabled = false;
+        }
+
+        document.getElementById('btn-apply-mode').onclick = () => {
+            applyMode(document.getElementById('btn-apply-mode').dataset.mode);
         };
 
         document.getElementById('btn-preset-add').onclick = async () => {
             const name = prompt('Preset name:');
             if (!name) return;
-            const startfreq = prompt('Start frequency (MHz):', '172.0');
-            if (!startfreq) return;
-            const stopfreq = prompt('Stop frequency (MHz):', '173.0');
-            if (!stopfreq) return;
-            const step = prompt('Step (MHz):', '0.0125');
+            const from = prompt('Start frequency (MHz):', '172.0');
+            if (!from) return;
+            const to = prompt('Stop frequency (MHz):', '173.0');
+            if (!to) return;
+            const step = prompt('Channel step (kHz):', '12.5');
             if (!step) return;
+            const serial = prompt('Device serial:', '00000102');
+            if (!serial) return;
+            const gain = prompt('Gain (dB):', '15.7');
+            if (!gain) return;
+            const slug = name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+            const scanFname = prompt('File prefix (scan_fname):', 'SCAN-' + (slug || 'scan'));
+            if (!scanFname) return;
 
             const preset = {
                 name: name,
                 type: 'rtlsdr',
-                serial: '00000102',
-                gain: 15.7,
-                sample_rate: 2.54,
-                startfreq: parseFloat(startfreq),
-                stopfreq: parseFloat(stopfreq),
-                step: parseFloat(step),
+                serial: serial,
+                gain: parseFloat(gain),
+                freq_from: parseFloat(from),
+                freq_to: parseFloat(to),
+                channel_step: parseFloat(step),
+                scan_fname: scanFname,
                 mp3outdir: '/media/rx/sources',
-                scan_fname: 'SCAN',
-                white_list: {},
-                black_list: []
+                work_list: {}
             };
 
             try {
@@ -430,6 +617,7 @@
 
                     const panel = document.createElement('div');
                     panel.className = 'frequency-panel';
+                    panel.dataset.receiver = receiver;
 
                     panel.innerHTML = `
                         <div class="controls-row">
@@ -440,8 +628,7 @@
                             <div class="audio-wrapper"><audio controls></audio></div>
                             <div class="btn-group">
                                 <button class="btn-delete" title="Delete">&#128465;</button>
-                                <button class="btn-whitelist" title="Whitelist &#8594; preset">&#8853;</button>
-                                <button class="btn-blacklist" title="Blacklist &#8594; preset">&#8854;</button>
+                                <button class="btn-whitelist" title="Add to work list (receive)">&#8853;</button>
                             </div>
                         </div>
                         <div class="info-row">
@@ -453,20 +640,20 @@
                     panels.appendChild(panel);
 
                     const audio = panel.querySelector('audio');
+                    audio.addEventListener('play', () => stopOtherAudio(audio));
                     const btnPrev = panel.querySelector('.btn-prev');
                     const btnNext = panel.querySelector('.btn-next');
                     const btnDelete = panel.querySelector('.btn-delete');
                     const btnWhitelist = panel.querySelector('.btn-whitelist');
-                    const btnBlacklist = panel.querySelector('.btn-blacklist');
                     const infoRight = panel.querySelector('.info-right');
 
                     let files = [];
                     let currentIdx = 0;
 
-                    function setFile(file) {
+                    function setFile(file, autoplay) {
                         audio.src = '/api/files/' + file.filename + '/stream';
                         audio.load();
-                        audio.play();
+                        if (autoplay !== false) audio.play();
                         infoRight.textContent = file.filename;
                     }
 
@@ -490,6 +677,7 @@
 
                     async function deleteAndRefresh() {
                         if (!files.length) return;
+                        const wasPlaying = !audio.paused;
                         try {
                             await fetch(`/api/frequencies/${freq}/${receiver}/delete`, {
                                 method: 'POST',
@@ -504,11 +692,12 @@
                             updateRecords(totalFiles);
                             currentIdx = 0;
                             if (files.length > 0) {
-                                setFile(files[0]);
+                                setFile(files[0], wasPlaying);
                             } else {
                                 audio.removeAttribute('src');
                                 audio.load();
                                 infoRight.textContent = '';
+                                panel.dataset.empty = '1';
                                 panel.style.display = 'none';
                             }
                         } catch (e) {}
@@ -520,40 +709,18 @@
                         const name = presetSelect.value;
                         if (!name) { showToast('Select a preset first'); return; }
                         if (!files.length) return;
-                        const label = prompt('Label for ' + freqMhz + ':');
+                        const label = prompt('Label for ' + freqMhz + ' (file name template):', 'marked');
                         if (label === null) return;
                         try {
-                            const res = await fetch(`/api/presets/${encodeURIComponent(name)}/whitelist`, {
+                            const res = await fetch(`/api/presets/${encodeURIComponent(name)}/worklist`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ freq: freqMhz, label: label || freqMhz })
+                                body: JSON.stringify({ freq: freqMhz, label: label || 'marked' })
                             });
                             const json = await res.json();
                             if (json.success) {
-                                showToast(freqMhz + ' added to whitelist');
-                                await deleteAndRefresh();
-                            } else {
-                                showToast('Error: ' + (json.error || 'unknown'));
-                            }
-                        } catch (e) {
-                            showToast('Network error');
-                        }
-                    };
-
-                    btnBlacklist.onclick = async () => {
-                        const name = presetSelect.value;
-                        if (!name) { showToast('Select a preset first'); return; }
-                        if (!files.length) return;
-                        if (!confirm('Add ' + freqMhz + ' to blacklist and delete recordings?')) return;
-                        try {
-                            const res = await fetch(`/api/presets/${encodeURIComponent(name)}/blacklist`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ freq: freqMhz })
-                            });
-                            const json = await res.json();
-                            if (json.success) {
-                                showToast(freqMhz + ' added to blacklist');
+                                showToast(freqMhz + ' added to work list (' + (label || 'marked') + ')');
+                                loadWorklist(name);
                                 await deleteAndRefresh();
                             } else {
                                 showToast('Error: ' + (json.error || 'unknown'));
@@ -572,7 +739,7 @@
                             updateRecords(totalFiles);
                             if (files.length > 0) {
                                 currentIdx = 0;
-                                setFile(files[0]);
+                                setFile(files[0], false);
                             }
                         } catch (e) {}
                     }
@@ -580,6 +747,7 @@
                     loadFiles();
                 }
 
+                applyPresetFilter();
                 if (totalFiles === 0) updateRecords(0);
             } catch (e) {
                 panels.innerHTML = '<p style="color:#c62828;padding:20px">Failed to load frequencies</p>';

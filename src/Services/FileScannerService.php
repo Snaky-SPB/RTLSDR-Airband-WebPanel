@@ -157,7 +157,7 @@ class FileScannerService
 
         foreach ($files as $file) {
             // Фильтр только SCAN файлов
-            if (preg_match('/_SCAN-.*\.mp3$/', $file)) {
+            if (preg_match('/^SCAN-.*\.mp3$/', $file)) {
                 $scanFiles[] = $file;
             }
         }
@@ -167,22 +167,22 @@ class FileScannerService
 
     /**
      * Распарсить имя файла
-     * Формат: YYYYMMDD_HH_Frequency_SCAN-Receiver.mp3
+     * Формат: SCAN-Receiver_YYYYMMDD_HH_Frequency.mp3
      */
     private function parseFilename(string $filename): ?array
     {
-        $pattern = '/^(\d{8})_(\d{1,2})_(\d+)_(SCAN-[a-zA-Z0-9_-]+)\.mp3$/';
+        $pattern = '/^(SCAN-[a-zA-Z0-9_-]+)_(\d{8})_(\d{1,2})_(\d+)\.mp3$/';
         
         if (!preg_match($pattern, $filename, $matches)) {
             return null;
         }
 
         return [
-            'date' => $matches[1],
-            'hour' => $matches[2],
-            'datetime' => $matches[1] . '_' . $matches[2],
-            'frequency' => $matches[3],
-            'receiver' => $matches[4],
+            'date' => $matches[2],
+            'hour' => $matches[3],
+            'datetime' => $matches[2] . '_' . $matches[3],
+            'frequency' => $matches[4],
+            'receiver' => $matches[1],
         ];
     }
 

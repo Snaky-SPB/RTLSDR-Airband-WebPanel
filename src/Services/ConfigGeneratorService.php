@@ -9,34 +9,73 @@ class ConfigGeneratorService
     private string $configPath = '/usr/local/etc/rtl_airband.conf';
     private ScannerStatusService $scannerStatus;
 
+    public const MAX_ACTIVE_CARRIERS = 8;
+    public const SQUELCH_SNR_THRESHOLD = 9.54;
+    public const MIN_SAMPLE_RATE = 2400000;
+    public const WAVE_RATE = 16000;
+    public const MAX_SCAN_RANGE_MHZ = 2.16;
+
     public function __construct(ScannerStatusService $scannerStatus)
     {
         $this->scannerStatus = $scannerStatus;
     }
 
-    public function generate(array $preset): string
+    public function generateScan(array $preset): string
     {
-        $freqs = [];
-        $labels = [];
-        $step = (float)($preset['step'] ?? 0.0125);
-        $start = (float)($preset['startfreq']);
-        $stop = (float)($preset['stopfreq']);
-        $scanFname = $preset['scan_fname'] ?? 'SCAN';
-        $whiteList = $preset['white_list'] ?? [];
-        $blackList = $preset['black_list'] ?? [];
+        $out = [];
+        $out[] = '# preset: ' . $preset['name'];
+        $out[] = 'localtime = true;';
+        $out[] = 'stats_filepath = "/media/rx/rtl_airband_stats.txt";';
+        $out[] = 'log_scan_activity = true;';
+        $out[] = 'min_transmission_time = 10.0;';
+        $out[] = 'max_transmission_time = 3600.0;';
+        $out[] = 'max_transmission_idle = 60.0;';
+        $out[] = 'devices:';
+        $out[] = '(';
+        $out[] = '{';
+        $out[] = '  type = "' . ($preset['type'] ?? 'rtlsdr') . '";';
+        $out[] = '  serial = "' . ($preset['serial'] ?? '00000102') . '";';
+        $out[] = '  gain = ' . $this->fmtFreq((float)($preset['gain'] ?? 15.7)) . ';';
+        $out[] = '  mode = "wideband_scan";';
+        $out[] = '  freq_from = ' . $this->fmtFreq((float)$preset['freq_from']) . ';';
+        $out[] = '  freq_to = ' . $this->fmtFreq((float)$preset['freq_to']) . ';';
+        $out[] = '  channel_step = ' . $this->fmtFreq((float)($preset['channel_step'] ?? 12.5)) . ';';
+        $out[] = '  max_active_carriers = ' . self::MAX_ACTIVE_CARRIERS . ';';
+        $out[] = '  modulation = "nfm";';
+        $out[] = '  squelch_snr_threshold = ' . self::SQUELCH_SNR_THRESHOLD . ';';
+        $out[] = '  outputs: ({';
+        $out[] = '    type = "file";';
+        $out[] = '    directory = "' . ($preset['mp3outdir'] ?? '/media/rx/sources') . '";';
+        $out[] = '    filename_template = "' . ($preset['scan_fname'] ?? 'SCAN') . '";';
+        $out[] = '    include_freq = true;';
+        $out[] = '    split_on_transmission = false;';
+        $out[] = '    append = true;';
+        $out[] = '    discontinuity_tone = false;';
+        $out[] = '  });';
+        $out[] = '}';
+        $out[] = ');';
 
-        for ($f = $start; $f <= $stop + 0.0001; $f += $step) {
-            $freq = round($f, 4);
-            $freqStr = sprintf('%.4f', $freq);
-            $freqs[] = $freq;
-            if (isset($whiteList[$freqStr])) {
-                $labels[] = $whiteList[$freqStr];
-            } else {
-                $labels[] = $scanFname;
-            }
+        return implode("\n", $out) . "\n";
+    }
+
+    public function generateReceive(array $preset): string
+    {
+        $workList = $preset['work_list'] ?? [];
+        if (!is_array($workList) || count($workList) === 0) {
+            throw new \InvalidArgumentException('work_list is empty');
         }
 
-        $centerfreq = round(array_sum($freqs) / count($freqs), 4);
+        $freqs = array_map('floatval', array_keys($workList));
+        $min = min($freqs);
+        $max = max($freqs);
+        $centerfreq = round(($min + $max) / 2, 4);
+
+        $rangeHz = ($max - $min) * 1000000;
+        $sampleRate = self::MIN_SAMPLE_RATE;
+        if ($rangeHz > 0) {
+            $needed = (int)ceil($rangeHz / 0.9 / self::WAVE_RATE) * self::WAVE_RATE;
+            $sampleRate = max(self::MIN_SAMPLE_RATE, $needed);
+        }
 
         $out = [];
         $out[] = '# preset: ' . $preset['name'];
@@ -45,42 +84,36 @@ class ConfigGeneratorService
         $out[] = 'multiple_output_threads = true;';
         $out[] = 'stats_filepath = "/media/rx/rtl_airband_stats.txt";';
         $out[] = 'log_scan_activity = true;';
+        $out[] = 'min_transmission_time = 10.0;';
+        $out[] = 'max_transmission_time = 3600.0;';
+        $out[] = 'max_transmission_idle = 60.0;';
         $out[] = 'devices:';
         $out[] = '(';
         $out[] = '{';
         $out[] = '  type = "' . ($preset['type'] ?? 'rtlsdr') . '";';
         $out[] = '  serial = "' . ($preset['serial'] ?? '00000102') . '";';
-        $out[] = '  gain = ' . ($preset['gain'] ?? 15.7) . ';';
-        $out[] = '  sample_rate = ' . ($preset['sample_rate'] ?? 2.54) . ';';
+        $out[] = '  gain = ' . $this->fmtFreq((float)($preset['gain'] ?? 15.7)) . ';';
+        $out[] = '  sample_rate = ' . $sampleRate . ';';
         $out[] = '  mode = "multichannel";';
         $out[] = '  centerfreq = ' . sprintf('%.4f', $centerfreq) . ';';
         $out[] = '  channels: (';
 
         $first = true;
-        foreach ($freqs as $i => $freq) {
-            $freqStr = sprintf('%.4f', $freq);
-            $label = $labels[$i];
-
-            if (in_array($freqStr, $blackList) && !isset($whiteList[$freqStr])) {
-                continue;
-            }
-
+        ksort($workList);
+        foreach ($workList as $freqStr => $label) {
+            $freq = (float)$freqStr;
             if (!$first) {
                 $out[] = '    ,';
             }
             $out[] = '    {';
-            $out[] = '    freq = ' . $freqStr . ';';
+            $out[] = '    freq = ' . sprintf('%.4f', $freq) . ';';
             $out[] = '    modulation = "nfm";';
             $out[] = '    outputs: ({';
             $out[] = '      type = "file";';
             $out[] = '      directory = "' . ($preset['mp3outdir'] ?? '/media/rx/sources') . '";';
             $out[] = '      filename_template = "' . $label . '";';
             $out[] = '      include_freq = true;';
-            if ($label === $scanFname) {
-                $out[] = '      split_on_transmission = false;';
-            } else {
-                $out[] = '      split_on_transmission = true;';
-            }
+            $out[] = '      split_on_transmission = true;';
             $out[] = '      });';
             $out[] = '    }';
             $first = false;
@@ -118,5 +151,26 @@ class ConfigGeneratorService
             return trim($m[1]);
         }
         return null;
+    }
+
+    public function getActiveMode(): ?string
+    {
+        if (!file_exists($this->configPath)) {
+            return null;
+        }
+        $content = file_get_contents($this->configPath);
+        if ($content === false) {
+            return null;
+        }
+        if (preg_match('/^\s*mode\s*=\s*"(wideband_scan|multichannel)"/m', $content, $m)) {
+            return $m[1];
+        }
+        return null;
+    }
+
+    private function fmtFreq(float $v): string
+    {
+        $s = rtrim(rtrim(sprintf('%.4f', $v), '0'), '.');
+        return str_contains($s, '.') ? $s : $s . '.0';
     }
 }

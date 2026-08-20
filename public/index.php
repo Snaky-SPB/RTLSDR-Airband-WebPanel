@@ -36,7 +36,7 @@ $systemInfoService = new SystemInfoService();
 
 $configGenerator = new ConfigGeneratorService($scannerStatusService);
 $frequencyHandler = new FrequencyHandler($fileScannerService);
-$systemHandler = new SystemHandler($scannerStatusService, $systemInfoService);
+$systemHandler = new SystemHandler($scannerStatusService, $systemInfoService, $configGenerator);
 $presetHandler = new PresetHandler($configGenerator);
 
 $view = new PhpRenderer(__DIR__ . '/../templates');
@@ -107,11 +107,10 @@ $app->get('/api/presets', [$presetHandler, 'list']);
 $app->get('/api/presets/active', [$presetHandler, 'getActive']);
 $app->post('/api/presets', [$presetHandler, 'create']);
 $app->delete('/api/presets/{name}', [$presetHandler, 'delete']);
-$app->post('/api/presets/{name}/apply', [$presetHandler, 'apply']);
-$app->post('/api/presets/{name}/whitelist', [$presetHandler, 'addWhitelist']);
-$app->post('/api/presets/{name}/whitelist/remove', [$presetHandler, 'removeWhitelist']);
-$app->post('/api/presets/{name}/blacklist', [$presetHandler, 'addBlacklist']);
-$app->post('/api/presets/{name}/blacklist/remove', [$presetHandler, 'removeBlacklist']);
+$app->post('/api/presets/{name}/apply-scan', [$presetHandler, 'applyScan']);
+$app->post('/api/presets/{name}/apply-receive', [$presetHandler, 'applyReceive']);
+$app->post('/api/presets/{name}/worklist', [$presetHandler, 'addWorklist']);
+$app->post('/api/presets/{name}/worklist/remove', [$presetHandler, 'removeWorklist']);
 
 // Health check
 $app->get('/api/health', function (Request $request, Response $response) {

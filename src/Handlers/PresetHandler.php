@@ -10,31 +10,77 @@ use RadioScanner\Services\ConfigGeneratorService;
 
 class PresetHandler
 {
-    private string $presetsFile;
+    private string $presetsDir;
     private ConfigGeneratorService $generator;
 
-    public function __construct(ConfigGeneratorService $generator, ?string $presetsFile = null)
+    public function __construct(ConfigGeneratorService $generator, ?string $presetsDir = null)
     {
         $this->generator = $generator;
-        $this->presetsFile = $presetsFile ?? __DIR__ . '/../../presets.json';
+        $this->presetsDir = $presetsDir ?? __DIR__ . '/../../presets';
+    }
+
+    private function isValidName(string $name): bool
+    {
+        return $name !== ''
+            && $name !== '.'
+            && $name !== '..'
+            && !str_contains($name, '/')
+            && !str_contains($name, '\\')
+            && !str_starts_with($name, '.');
+    }
+
+    private function presetFile(string $name): string
+    {
+        return $this->presetsDir . '/' . $name . '.json';
     }
 
     private function loadPresets(): array
     {
-        if (!file_exists($this->presetsFile)) {
-            return [];
+        $presets = [];
+        if (!is_dir($this->presetsDir)) {
+            return $presets;
         }
-        $json = file_get_contents($this->presetsFile);
-        if ($json === false) {
-            return [];
+        $files = glob($this->presetsDir . '/*.json') ?: [];
+        foreach ($files as $file) {
+            $json = file_get_contents($file);
+            if ($json === false) {
+                continue;
+            }
+            $preset = json_decode($json, true);
+            if (is_array($preset) && !empty($preset['name'])) {
+                $presets[] = $preset;
+            }
         }
-        $data = json_decode($json, true);
-        return is_array($data) ? $data : [];
+        usort($presets, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+        return $presets;
     }
 
-    private function savePresets(array $presets): bool
+    private function findPreset(string $name): ?array
     {
-        return file_put_contents($this->presetsFile, json_encode($presets, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) !== false;
+        if (!$this->isValidName($name)) {
+            return null;
+        }
+        $file = $this->presetFile($name);
+        if (!file_exists($file)) {
+            return null;
+        }
+        $json = file_get_contents($file);
+        if ($json === false) {
+            return null;
+        }
+        $preset = json_decode($json, true);
+        return is_array($preset) ? $preset : null;
+    }
+
+    private function savePreset(array $preset): bool
+    {
+        if (!is_dir($this->presetsDir)) {
+            mkdir($this->presetsDir, 0755, true);
+        }
+        return file_put_contents(
+            $this->presetFile($preset['name']),
+            json_encode($preset, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n"
+        ) !== false;
     }
 
     private function respond(Response $response, array $data, int $status = 200): Response
@@ -47,45 +93,128 @@ class PresetHandler
 
     public function list(Request $request, Response $response): Response
     {
-        $presets = $this->loadPresets();
-        $active = $this->generator->getActivePresetName();
         return $this->respond($response, [
             'success' => true,
-            'data' => $presets,
-            'active' => $active,
+            'data' => $this->loadPresets(),
+            'active' => $this->generator->getActivePresetName(),
+            'mode' => $this->generator->getActiveMode(),
         ]);
     }
 
     public function getActive(Request $request, Response $response): Response
     {
-        $name = $this->generator->getActivePresetName();
         return $this->respond($response, [
             'success' => true,
-            'data' => ['name' => $name],
+            'data' => [
+                'name' => $this->generator->getActivePresetName(),
+                'mode' => $this->generator->getActiveMode(),
+            ],
         ]);
     }
 
     public function create(Request $request, Response $response): Response
     {
         $body = $request->getBody()->getContents();
-        $preset = json_decode($body, true);
-        if (!is_array($preset) || empty($preset['name'])) {
+        $input = json_decode($body, true);
+        if (!is_array($input)) {
             return $this->respond($response, [
                 'success' => false,
-                'error' => 'Invalid preset data: name is required',
+                'error' => 'Invalid JSON',
             ], 400);
         }
-        $presets = $this->loadPresets();
-        foreach ($presets as $p) {
-            if ($p['name'] === $preset['name']) {
+
+        $name = trim((string)($input['name'] ?? ''));
+        if ($name === '' || !$this->isValidName($name)) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Invalid preset name',
+            ], 400);
+        }
+
+        $freqFrom = (float)($input['freq_from'] ?? 0);
+        $freqTo = (float)($input['freq_to'] ?? 0);
+        $step = (float)($input['channel_step'] ?? 12.5);
+        if ($freqFrom <= 0 || $freqTo <= 0 || $freqTo <= $freqFrom) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Invalid frequency range: freq_from and freq_to (MHz) are required, freq_to > freq_from',
+            ], 400);
+        }
+        $range = $freqTo - $freqFrom;
+        if ($range > ConfigGeneratorService::MAX_SCAN_RANGE_MHZ) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Range too large: ' . round($range, 4) . ' MHz > ' . ConfigGeneratorService::MAX_SCAN_RANGE_MHZ . ' MHz (SDR sample rate limit)',
+            ], 400);
+        }
+        if ($step <= 0) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'channel_step (kHz) must be > 0',
+            ], 400);
+        }
+
+        $scanFname = trim((string)($input['scan_fname'] ?? ''));
+        if ($scanFname === '') {
+            $scanFname = $this->defaultScanFname($name);
+        }
+        if (!preg_match('/^SCAN-[A-Za-z0-9_-]+$/', $scanFname)) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'scan_fname must match SCAN-[A-Za-z0-9_-]+',
+            ], 400);
+        }
+
+        $workList = $input['work_list'] ?? [];
+        if (!is_array($workList)) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'work_list must be an object {freq: label}',
+            ], 400);
+        }
+        foreach ($workList as $freq => $label) {
+            if (!is_string($freq) || !preg_match('/^\d+\.\d{1,4}$/', $freq)) {
                 return $this->respond($response, [
                     'success' => false,
-                    'error' => 'Preset already exists: ' . $preset['name'],
-                ], 409);
+                    'error' => 'Invalid work_list frequency: ' . var_export($freq, true),
+                ], 400);
+            }
+            $label = (string)$label;
+            if ($label === '' || !preg_match('/^[A-Za-z0-9_-]+$/', $label)) {
+                return $this->respond($response, [
+                    'success' => false,
+                    'error' => 'Invalid work_list label for ' . $freq . ' (allowed: A-Za-z0-9_-)',
+                ], 400);
             }
         }
-        $presets[] = $preset;
-        $this->savePresets($presets);
+
+        if ($this->findPreset($name) !== null) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Preset already exists: ' . $name,
+            ], 409);
+        }
+
+        $preset = [
+            'name' => $name,
+            'type' => (string)($input['type'] ?? 'rtlsdr'),
+            'serial' => (string)($input['serial'] ?? '00000102'),
+            'gain' => (float)($input['gain'] ?? 15.7),
+            'freq_from' => $freqFrom,
+            'freq_to' => $freqTo,
+            'channel_step' => $step,
+            'scan_fname' => $scanFname,
+            'mp3outdir' => (string)($input['mp3outdir'] ?? '/media/rx/sources'),
+            'work_list' => $workList,
+        ];
+
+        if (!$this->savePreset($preset)) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Failed to save preset',
+            ], 500);
+        }
+
         return $this->respond($response, [
             'success' => true,
             'data' => $preset,
@@ -95,57 +224,49 @@ class PresetHandler
     public function delete(Request $request, Response $response, array $args): Response
     {
         $name = $args['name'] ?? '';
-        if ($name === '') {
+        if ($name === '' || !$this->isValidName($name)) {
             return $this->respond($response, [
                 'success' => false,
-                'error' => 'Name is required',
+                'error' => 'Invalid preset name',
             ], 400);
         }
-        $presets = $this->loadPresets();
-        $found = false;
-        foreach ($presets as $i => $p) {
-            if ($p['name'] === $name) {
-                array_splice($presets, $i, 1);
-                $found = true;
-                break;
-            }
-        }
-        if (!$found) {
+        $file = $this->presetFile($name);
+        if (!file_exists($file)) {
             return $this->respond($response, [
                 'success' => false,
                 'error' => 'Preset not found: ' . $name,
             ], 404);
         }
-        $this->savePresets($presets);
+        if (!unlink($file)) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Failed to delete preset',
+            ], 500);
+        }
         return $this->respond($response, ['success' => true]);
     }
 
-    public function apply(Request $request, Response $response, array $args): Response
+    public function applyScan(Request $request, Response $response, array $args): Response
     {
         $name = $args['name'] ?? '';
-        if ($name === '') {
-            return $this->respond($response, [
-                'success' => false,
-                'error' => 'Name is required',
-            ], 400);
-        }
-        $presets = $this->loadPresets();
-        $preset = null;
-        foreach ($presets as $p) {
-            if ($p['name'] === $name) {
-                $preset = $p;
-                break;
-            }
-        }
+        $preset = $this->findPreset($name);
         if ($preset === null) {
             return $this->respond($response, [
                 'success' => false,
                 'error' => 'Preset not found: ' . $name,
             ], 404);
         }
-        $config = $this->generator->generate($preset);
-        $ok = $this->generator->apply($config);
-        if (!$ok) {
+
+        $range = (float)$preset['freq_to'] - (float)$preset['freq_from'];
+        if ($range > ConfigGeneratorService::MAX_SCAN_RANGE_MHZ) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Range too large: ' . round($range, 4) . ' MHz > ' . ConfigGeneratorService::MAX_SCAN_RANGE_MHZ . ' MHz',
+            ], 400);
+        }
+
+        $config = $this->generator->generateScan($preset);
+        if (!$this->generator->apply($config)) {
             return $this->respond($response, [
                 'success' => false,
                 'error' => 'Failed to apply preset (write config or restart scanner)',
@@ -153,126 +274,134 @@ class PresetHandler
         }
         return $this->respond($response, [
             'success' => true,
-            'data' => ['name' => $name, 'action' => 'applied'],
+            'data' => ['name' => $name, 'mode' => 'wideband_scan'],
         ]);
     }
 
-    private function findPresetByName(string $name): ?array
+    public function applyReceive(Request $request, Response $response, array $args): Response
     {
-        foreach ($this->loadPresets() as $p) {
-            if ($p['name'] === $name) {
-                return $p;
-            }
+        $name = $args['name'] ?? '';
+        $preset = $this->findPreset($name);
+        if ($preset === null) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Preset not found: ' . $name,
+            ], 404);
         }
-        return null;
+
+        $workList = $preset['work_list'] ?? [];
+        if (!is_array($workList) || count($workList) === 0) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'work_list is empty: add frequencies to receive mode first',
+            ], 400);
+        }
+
+        $config = $this->generator->generateReceive($preset);
+        if (!$this->generator->apply($config)) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Failed to apply preset (write config or restart scanner)',
+            ], 500);
+        }
+        return $this->respond($response, [
+            'success' => true,
+            'data' => ['name' => $name, 'mode' => 'multichannel'],
+        ]);
     }
 
-    private function updatePreset(string $name, array $updated): bool
-    {
-        $presets = $this->loadPresets();
-        foreach ($presets as $i => $p) {
-            if ($p['name'] === $name) {
-                $presets[$i] = $updated;
-                return $this->savePresets($presets);
-            }
-        }
-        return false;
-    }
-
-    public function addWhitelist(Request $request, Response $response, array $args): Response
+    public function addWorklist(Request $request, Response $response, array $args): Response
     {
         $name = $args['name'] ?? '';
         $body = json_decode($request->getBody()->getContents(), true);
-        $freq = $body['freq'] ?? '';
-        $label = $body['label'] ?? 'marked';
+        $freq = (string)($body['freq'] ?? '');
+        $label = (string)($body['label'] ?? 'marked');
 
         if ($name === '' || $freq === '') {
-            return $this->respond($response, ['success' => false, 'error' => 'name and freq are required'], 400);
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'name and freq are required',
+            ], 400);
         }
 
-        $preset = $this->findPresetByName($name);
-        if (!$preset) {
-            return $this->respond($response, ['success' => false, 'error' => 'Preset not found'], 404);
+        $freqKey = sprintf('%.4f', (float)$freq);
+        if (!preg_match('/^\d+\.\d{1,4}$/', $freqKey)) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Invalid frequency: ' . $freq,
+            ], 400);
+        }
+        if (!preg_match('/^[A-Za-z0-9_-]+$/', $label)) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Invalid label (allowed: A-Za-z0-9_-)',
+            ], 400);
         }
 
-        if (!isset($preset['white_list']) || !is_array($preset['white_list'])) {
-            $preset['white_list'] = [];
+        $preset = $this->findPreset($name);
+        if ($preset === null) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Preset not found: ' . $name,
+            ], 404);
         }
-        $preset['white_list'][$freq] = $label;
-        $this->updatePreset($name, $preset);
 
-        return $this->respond($response, ['success' => true, 'data' => ['freq' => $freq, 'label' => $label]]);
+        if (!isset($preset['work_list']) || !is_array($preset['work_list'])) {
+            $preset['work_list'] = [];
+        }
+        $preset['work_list'][$freqKey] = $label;
+        if (!$this->savePreset($preset)) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Failed to save preset',
+            ], 500);
+        }
+
+        return $this->respond($response, [
+            'success' => true,
+            'data' => ['freq' => $freqKey, 'label' => $label],
+        ]);
     }
 
-    public function removeWhitelist(Request $request, Response $response, array $args): Response
+    public function removeWorklist(Request $request, Response $response, array $args): Response
     {
         $name = $args['name'] ?? '';
         $body = json_decode($request->getBody()->getContents(), true);
-        $freq = $body['freq'] ?? '';
+        $freq = (string)($body['freq'] ?? '');
 
         if ($name === '' || $freq === '') {
-            return $this->respond($response, ['success' => false, 'error' => 'name and freq are required'], 400);
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'name and freq are required',
+            ], 400);
         }
 
-        $preset = $this->findPresetByName($name);
-        if (!$preset) {
-            return $this->respond($response, ['success' => false, 'error' => 'Preset not found'], 404);
+        $preset = $this->findPreset($name);
+        if ($preset === null) {
+            return $this->respond($response, [
+                'success' => false,
+                'error' => 'Preset not found: ' . $name,
+            ], 404);
         }
 
-        if (isset($preset['white_list'][$freq])) {
-            unset($preset['white_list'][$freq]);
-            $this->updatePreset($name, $preset);
+        $freqKey = sprintf('%.4f', (float)$freq);
+        if (isset($preset['work_list'][$freqKey])) {
+            unset($preset['work_list'][$freqKey]);
+            if (!$this->savePreset($preset)) {
+                return $this->respond($response, [
+                    'success' => false,
+                    'error' => 'Failed to save preset',
+                ], 500);
+            }
         }
 
         return $this->respond($response, ['success' => true]);
     }
 
-    public function addBlacklist(Request $request, Response $response, array $args): Response
+    private function defaultScanFname(string $name): string
     {
-        $name = $args['name'] ?? '';
-        $body = json_decode($request->getBody()->getContents(), true);
-        $freq = $body['freq'] ?? '';
-
-        if ($name === '' || $freq === '') {
-            return $this->respond($response, ['success' => false, 'error' => 'name and freq are required'], 400);
-        }
-
-        $preset = $this->findPresetByName($name);
-        if (!$preset) {
-            return $this->respond($response, ['success' => false, 'error' => 'Preset not found'], 404);
-        }
-
-        if (!isset($preset['black_list']) || !is_array($preset['black_list'])) {
-            $preset['black_list'] = [];
-        }
-        if (!in_array($freq, $preset['black_list'])) {
-            $preset['black_list'][] = $freq;
-        }
-        $this->updatePreset($name, $preset);
-
-        return $this->respond($response, ['success' => true, 'data' => ['freq' => $freq]]);
-    }
-
-    public function removeBlacklist(Request $request, Response $response, array $args): Response
-    {
-        $name = $args['name'] ?? '';
-        $body = json_decode($request->getBody()->getContents(), true);
-        $freq = $body['freq'] ?? '';
-
-        if ($name === '' || $freq === '') {
-            return $this->respond($response, ['success' => false, 'error' => 'name and freq are required'], 400);
-        }
-
-        $preset = $this->findPresetByName($name);
-        if (!$preset) {
-            return $this->respond($response, ['success' => false, 'error' => 'Preset not found'], 404);
-        }
-
-        if (isset($preset['black_list']) && is_array($preset['black_list'])) {
-            $preset['black_list'] = array_values(array_filter($preset['black_list'], fn($f) => $f !== $freq));
-            $this->updatePreset($name, $preset);
-        }
-
-        return $this->respond($response, ['success' => true]);
+        $slug = preg_replace('/[^A-Za-z0-9]+/', '-', $name);
+        $slug = trim($slug, '-');
+        return 'SCAN-' . ($slug !== '' ? $slug : 'scan');
     }
 }
