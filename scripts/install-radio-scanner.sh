@@ -60,15 +60,27 @@ else
     die "/etc/os-release не найден — скрипт должен выполняться на самом устройстве"
 fi
 
-# Каталог исходников rtl_airband: соседняя копия (развёрнутое дерево
-# radio-scanner/) в приоритете, иначе клонируем в CLONE_DIR_AIRBAND.
+# Дерево считается рабочим, если git внутри него разрешает HEAD
+git_tree_ok() {
+    git -c safe.directory='*' -C "$1" rev-parse --verify HEAD >/dev/null 2>&1
+}
+
+# Каталог исходников rtl_airband:
+#  1. явно заданный AIRBAND_DIR (требует рабочий git, иначе ошибка)
+#  2. соседняя копия с рабочим .git (развёрнутое дерево radio-scanner/)
+#  3. клон в CLONE_DIR_AIRBAND
 AIRBAND_DIR="${AIRBAND_DIR:-}"
-if [ -z "$AIRBAND_DIR" ]; then
-    if [ -d "$SCRIPT_ROOT/RTLSDR-Airband/.git" ]; then
+if [ -n "$AIRBAND_DIR" ]; then
+    git_tree_ok "$AIRBAND_DIR" || die "$AIRBAND_DIR: не рабочее git-хранилище (частичная копия?). Запустите без AIRBAND_DIR или с чистой копией"
+elif [ -d "$SCRIPT_ROOT/RTLSDR-Airband/.git" ]; then
+    if git_tree_ok "$SCRIPT_ROOT/RTLSDR-Airband"; then
         AIRBAND_DIR="$SCRIPT_ROOT/RTLSDR-Airband"
     else
+        log "NOTE: соседняя RTLSDR-Airband/ с битым .git (частичная копия?) - буду клонировать с GitHub"
         AIRBAND_DIR="$CLONE_DIR_AIRBAND"
     fi
+else
+    AIRBAND_DIR="$CLONE_DIR_AIRBAND"
 fi
 
 install_airband() {
@@ -79,6 +91,12 @@ install_airband() {
     apt-get install -y -qq \
         build-essential cmake git pkg-config curl rsync ca-certificates \
         libmp3lame-dev libshout3-dev libconfig++-dev libfftw3-dev librtlsdr-dev
+
+    # Самоисцеление: повреждённый клон в управляемом скриптом каталоге - удалить и пересоздать
+    if [ "$AIRBAND_DIR" = "$CLONE_DIR_AIRBAND" ] && [ -d "$AIRBAND_DIR/.git" ] && ! git_tree_ok "$AIRBAND_DIR"; then
+        log "  существующий клон $AIRBAND_DIR повреждён - удаляю"
+        rm -rf "$AIRBAND_DIR"
+    fi
 
     if [ ! -d "$AIRBAND_DIR/.git" ]; then
         log "  клонирование: $AIRBAND_REPO ($AIRBAND_BRANCH) -> $AIRBAND_DIR"
@@ -133,6 +151,10 @@ install_webpanel() {
     fi
     if [ -z "$dir" ]; then
         dir="$CLONE_DIR_WEBPANEL"
+        if [ -d "$dir/.git" ] && ! git_tree_ok "$dir"; then
+            log "  существующий клон $dir повреждён - удаляю"
+            rm -rf "$dir"
+        fi
         if [ -d "$dir/.git" ]; then
             log "  обновление: $dir -> $WEBPANEL_BRANCH"
             git -C "$dir" fetch origin
