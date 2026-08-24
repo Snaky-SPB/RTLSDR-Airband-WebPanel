@@ -110,6 +110,11 @@ install_airband() {
         log "  локальная копия: $AIRBAND_DIR (git-операции не выполняются)"
     fi
 
+    # быстрая проверка: git должен выдавать версию, иначе cmake упадёт на CMakeLists.txt:13
+    ver="$(git -c safe.directory='*' -C "$AIRBAND_DIR" describe --tags --abbrev --dirty --always 2>/dev/null || true)"
+    [ -n "$ver" ] || die "$AIRBAND_DIR: git не выдаёт версию (дерево повреждено). Удалите каталог и повторите запуск"
+    log "  версия: $ver"
+
     log "  сборка: Release, NFM, RTL-SDR, PLATFORM=$PLATFORM"
     cmake -S "$AIRBAND_DIR" -B "$AIRBAND_DIR/build" \
         -DCMAKE_BUILD_TYPE=Release \
