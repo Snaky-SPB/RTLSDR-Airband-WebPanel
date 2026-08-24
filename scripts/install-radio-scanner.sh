@@ -116,14 +116,18 @@ install_airband() {
     log "  версия: $ver"
 
     log "  сборка: Release, NFM, RTL-SDR, PLATFORM=$PLATFORM"
-    cmake -S "$AIRBAND_DIR" -B "$AIRBAND_DIR/build" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DNFM=ON -DRTLSDR=ON -DMIRISDR=OFF -DSOAPYSDR=OFF -DPULSEAUDIO=OFF \
-        -DPLATFORM="$PLATFORM"
-    cmake --build "$AIRBAND_DIR/build" -j"$(nproc)"
+    # cmake запускается изнутри дерева: find_version ищет .git от CWD процесса
+    # (execute_process наследует CWD cmake, а не source-каталог) — извне версия
+    # не детектится и CMakeLists.txt:13 падает
+    ( cd "$AIRBAND_DIR" && \
+        cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DNFM=ON -DRTLSDR=ON -DMIRISDR=OFF -DSOAPYSDR=OFF -DPULSEAUDIO=OFF \
+            -DPLATFORM="$PLATFORM" && \
+        cmake --build build -j"$(nproc)" )
 
     log "  установка: cmake --install -> /usr/local/bin/rtl_airband"
-    cmake --install "$AIRBAND_DIR/build"
+    ( cd "$AIRBAND_DIR" && cmake --install build )
 
     log "  systemd: rtl_airband.service"
     install -m 644 "$AIRBAND_DIR/init.d/rtl_airband.service" /etc/systemd/system/rtl_airband.service
