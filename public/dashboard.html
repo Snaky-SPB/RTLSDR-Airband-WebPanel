@@ -107,6 +107,12 @@
             font-size: 13px;
             margin-right: 8px;
         }
+        .band-link {
+            color: #2e7d32;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .band-link:hover { text-decoration: underline; }
         .link-freq:hover { text-decoration: underline; }
         .btn-edit, .btn-remove {
             border: none;
@@ -224,11 +230,12 @@
                         <th>Type</th>
                         <th>Serial</th>
                         <th>Mode</th>
+                        <th>Band</th>
                         <th style="text-align:right">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="devices-tbody">
-                    <tr id="no-devices-row"><td colspan="5" style="color:#757575">No devices yet — add one.</td></tr>
+                    <tr id="no-devices-row"><td colspan="6" style="color:#757575">No devices yet — add one.</td></tr>
                 </tbody>
             </table>
             <div class="device-form" id="device-form" style="display:none">
@@ -241,9 +248,6 @@
                 <label>Serial
                     <input id="df-serial" placeholder="00000102">
                 </label>
-                <label>Gain (dB)
-                    <input id="df-gain" type="number" step="0.1" placeholder="15.7">
-                </label>
                 <label>Correction (ppm)
                     <input id="df-correction" type="number" step="1" placeholder="0">
                 </label>
@@ -253,17 +257,8 @@
                         <option value="multichannel">multichannel</option>
                     </select>
                 </label>
-                <label id="lf-freq-from">From (MHz)
-                    <input id="df-freq-from" type="number" step="0.0001" placeholder="172.0">
-                </label>
-                <label id="lf-freq-to">To (MHz)
-                    <input id="df-freq-to" type="number" step="0.0001" placeholder="173.0">
-                </label>
-                <label id="lf-channel-step">Step (kHz)
-                    <input id="df-channel-step" type="number" step="0.625" placeholder="12.5">
-                </label>
-                <label id="lf-scan-fname">SCAN prefix
-                    <input id="df-scan-fname" placeholder="SCAN-172-173">
+                <label>Band
+                    <select id="df-preset"></select>
                 </label>
                 <div class="form-actions">
                     <button class="btn-save" id="btn-device-save">Save</button>
@@ -327,11 +322,16 @@
         }
 
         let devices = [];
+        let bands = [];
 
         async function loadDevices() {
             try {
-                const data = await api('/api/devices');
-                devices = data.data || [];
+                const [devData, bandData] = await Promise.all([
+                    api('/api/devices'),
+                    api('/api/presets'),
+                ]);
+                devices = devData.data || [];
+                bands = bandData.data || [];
                 renderDevices();
             } catch (e) {
                 showToast('Failed to load devices: ' + e.message, true);
@@ -342,7 +342,7 @@
             const tbody = document.getElementById('devices-tbody');
             tbody.innerHTML = '';
             if (devices.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="color:#757575">No devices yet — add one.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="color:#757575">No devices yet — add one.</td></tr>';
                 return;
             }
             for (const d of devices) {
@@ -351,13 +351,17 @@
                 const modeCell = live
                     ? `<span class="mode-badge ${live === 'wideband_scan' ? 'live' : 'live-receive'}">${live}</span>`
                     : `<span class="mode-badge" title="planned (not in live config)">${d.mode}</span>`;
+                const bandCell = d.preset
+                    ? `<a class="band-link" href="/device/${encodeURIComponent(d.name)}">${d.preset}</a>`
+                    : '<span style="color:#999" title="no band — device not in generated config">—</span>';
                 tr.innerHTML = `
                     <td class="dev-name">${d.name}</td>
                     <td>${d.type}</td>
                     <td class="dev-serial">${d.serial}</td>
                     <td>${modeCell}</td>
+                    <td>${bandCell}</td>
                     <td class="actions">
-                        <a class="link-freq" href="/device/${encodeURIComponent(d.name)}">Frequencies →</a>
+                        <a class="link-freq" href="/device/${encodeURIComponent(d.name)}">Setup →</a>
                         <button class="btn-edit" data-name="${d.name}">Edit</button>
                         <button class="btn-remove" data-name="${d.name}">× </button>
                     </td>`;
@@ -367,10 +371,15 @@
             tbody.querySelectorAll('.btn-remove').forEach(btn => btn.onclick = () => removeDevice(btn.dataset.name));
         }
 
-        function setScanFieldsVisible() {
-            const scan = document.getElementById('df-mode').value === 'wideband_scan';
-            for (const id of ['lf-freq-from', 'lf-freq-to', 'lf-channel-step', 'lf-scan-fname']) {
-                document.getElementById(id).style.display = scan ? '' : 'none';
+        function fillPresetSelect(selected) {
+            const sel = document.getElementById('df-preset');
+            sel.innerHTML = '<option value="">— no band —</option>';
+            for (const b of bands) {
+                const opt = document.createElement('option');
+                opt.value = b.name;
+                opt.textContent = `${b.name} (${b.freq_from}–${b.freq_to} MHz)`;
+                if (b.name === selected) opt.selected = true;
+                sel.appendChild(opt);
             }
         }
 
@@ -381,14 +390,9 @@
             document.getElementById('df-name').disabled = !!d;
             document.getElementById('df-type').value = d ? d.type : 'rtlsdr';
             document.getElementById('df-serial').value = d ? d.serial : '';
-            document.getElementById('df-gain').value = d ? d.gain : 15.7;
             document.getElementById('df-correction').value = d ? d.correction : 0;
             document.getElementById('df-mode').value = d ? d.mode : 'wideband_scan';
-            document.getElementById('df-freq-from').value = d && d.freq_from != null ? d.freq_from : '';
-            document.getElementById('df-freq-to').value = d && d.freq_to != null ? d.freq_to : '';
-            document.getElementById('df-channel-step').value = d && d.channel_step != null ? d.channel_step : 12.5;
-            document.getElementById('df-scan-fname').value = d && d.scan_fname ? d.scan_fname : '';
-            setScanFieldsVisible();
+            fillPresetSelect(d ? d.preset : '');
             document.getElementById('device-form').style.display = 'grid';
         }
 
@@ -398,21 +402,13 @@
         }
 
         async function saveDevice() {
-            const isScan = document.getElementById('df-mode').value === 'wideband_scan';
             const body = {
                 type: document.getElementById('df-type').value,
                 serial: document.getElementById('df-serial').value.trim(),
-                gain: parseFloat(document.getElementById('df-gain').value || '15.7'),
                 correction: parseFloat(document.getElementById('df-correction').value || '0'),
                 mode: document.getElementById('df-mode').value,
+                preset: document.getElementById('df-preset').value,
             };
-            if (isScan) {
-                body.freq_from = parseFloat(document.getElementById('df-freq-from').value);
-                body.freq_to = parseFloat(document.getElementById('df-freq-to').value);
-                body.channel_step = parseFloat(document.getElementById('df-channel-step').value || '12.5');
-                const fname = document.getElementById('df-scan-fname').value.trim();
-                if (fname) body.scan_fname = fname;
-            }
             try {
                 if (editingName) {
                     await api('/api/devices/' + encodeURIComponent(editingName), 'POST', body);
@@ -459,7 +455,6 @@
             }
         }
 
-        document.getElementById('df-mode').onchange = setScanFieldsVisible;
         document.getElementById('btn-device-add').onclick = () => openForm(null);
         document.getElementById('btn-device-save').onclick = saveDevice;
         document.getElementById('btn-device-cancel').onclick = closeForm;

@@ -22,19 +22,22 @@ class ConfigGeneratorService
     }
 
     /**
-     * Генерация полного конфига из списка устройств
-     * (каждое — в своём режиме: wideband_scan или multichannel).
+     * Генерация полного конфига из пар (устройство + его полоса).
+     * Железо (serial, correction, mp3outdir, mode) — с устройства;
+     * gain, диапазон/work_list — с полосы.
      *
-     * @throws \InvalidArgumentException при некорректном состоянии устройств
+     * @param array $pairs список ['device' => array, 'band' => array]
+     *
+     * @throws \InvalidArgumentException при некорректном состоянии
      */
-    public function generate(array $devices): string
+    public function generate(array $pairs): string
     {
-        if ($devices === []) {
+        if ($pairs === []) {
             throw new \InvalidArgumentException('no devices');
         }
 
         $out = [
-            '# generated: ' . date('Y-m-d H:i:s') . ' devices: ' . count($devices),
+            '# generated: ' . date('Y-m-d H:i:s') . ' devices: ' . count($pairs),
             'localtime = true;',
             'multiple_demod_threads = true;',
             'multiple_output_threads = true;',
@@ -47,9 +50,9 @@ class ConfigGeneratorService
             '(',
         ];
 
-        $total = count($devices);
-        foreach ($devices as $i => $device) {
-            $out[] = $this->deviceBlock($device) . "\n}";
+        $total = count($pairs);
+        foreach ($pairs as $i => $pair) {
+            $out[] = $this->deviceBlock($pair['device'], $pair['band']) . "\n}";
             if ($i < $total - 1) {
                 $out[] = ',';
             }
@@ -96,41 +99,47 @@ class ConfigGeneratorService
         return $modes;
     }
 
-    private function deviceBlock(array $device): string
+    private function deviceBlock(array $device, array $band): string
     {
         $mode = (string)($device['mode'] ?? 'wideband_scan');
-        $out = ["{", '  type = "' . ($device['type'] ?? 'rtlsdr') . '";', '  serial = "' . $device['serial'] . '";'];
-        $out[] = '  gain = ' . $this->fmtFreq((float)($device['gain'] ?? 15.7)) . ';';
+        $name = (string)($device['name'] ?? '?');
+        $gain = (float)($band['gain'] ?? PresetService::DEFAULT_GAIN);
+        $out = [
+            "{",
+            '  type = "' . ($device['type'] ?? 'rtlsdr') . '";',
+            '  serial = "' . $device['serial'] . '";',
+            '  gain = ' . $this->fmtFreq($gain) . ';',
+        ];
         if ((float)($device['correction'] ?? 0) !== 0.0) {
             // rtlsdr: correction — int (ppm)
             $out[] = '  correction = ' . (int)round((float)$device['correction']) . ';';
         }
 
         if ($mode === 'multichannel') {
-            return $this->multichannelBlock($device, $out);
+            return $this->multichannelBlock($device, $band, $out);
         }
 
-        $freqFrom = (float)($device['freq_from'] ?? 0);
-        $freqTo = (float)($device['freq_to'] ?? 0);
+        $freqFrom = (float)($band['freq_from'] ?? 0);
+        $freqTo = (float)($band['freq_to'] ?? 0);
         $range = $freqTo - $freqFrom;
         if ($range <= 0) {
-            throw new \InvalidArgumentException('device ' . $device['name'] . ': invalid scan range');
+            throw new \InvalidArgumentException("device $name: invalid scan range in band " . ($band['name'] ?? '?'));
         }
         if ($range > self::MAX_SCAN_RANGE_MHZ) {
-            throw new \InvalidArgumentException('device ' . $device['name'] . ': range must not exceed ' . self::MAX_SCAN_RANGE_MHZ . ' MHz');
+            throw new \InvalidArgumentException("device $name: band range must not exceed " . self::MAX_SCAN_RANGE_MHZ . ' MHz');
         }
 
         $out[] = '  mode = "wideband_scan";';
         $out[] = '  freq_from = ' . $this->fmtFreq($freqFrom) . ';';
         $out[] = '  freq_to = ' . $this->fmtFreq($freqTo) . ';';
-        $out[] = '  channel_step = ' . $this->fmtFreq((float)($device['channel_step'] ?? 12.5)) . ';';
+        $out[] = '  channel_step = ' . $this->fmtFreq((float)($band['channel_step'] ?? PresetService::DEFAULT_CHANNEL_STEP)) . ';';
         $out[] = '  max_active_carriers = ' . self::MAX_ACTIVE_CARRIERS . ';';
         $out[] = '  modulation = "nfm";';
         $out[] = '  squelch_snr_threshold = ' . self::SQUELCH_SNR_THRESHOLD . ';';
         $out[] = '    outputs: ({';
         $out[] = '      type = "file";';
-        $out[] = '      directory = "' . ($device['mp3outdir'] ?? '/media/rx/sources') . '";';
-        $out[] = '      filename_template = "' . ($device['scan_fname'] ?? 'SCAN') . '";';
+        $out[] = '      directory = "' . ($device['mp3outdir'] ?? DeviceService::DEFAULT_SOURCES_DIR) . '";';
+        $out[] = '      filename_template = "' . ($band['scan_fname'] ?? 'SCAN') . '";';
         $out[] = '      include_freq = true;';
         $out[] = '      split_on_transmission = false;';
         $out[] = '      append = true;';
@@ -140,15 +149,16 @@ class ConfigGeneratorService
         return implode("\n", $out);
     }
 
-    private function multichannelBlock(array $device, array $head): string
+    private function multichannelBlock(array $device, array $band, array $head): string
     {
-        $workList = is_array($device['work_list'] ?? null) ? $device['work_list'] : [];
+        $name = (string)($device['name'] ?? '?');
+        $workList = is_array($band['work_list'] ?? null) ? $band['work_list'] : [];
         $enabled = array_filter(
             $workList,
             static fn($entry) => is_array($entry) ? (bool)($entry['enabled'] ?? true) : true
         );
         if ($enabled === []) {
-            throw new \InvalidArgumentException('device ' . $device['name'] . ': no enabled channels in work_list');
+            throw new \InvalidArgumentException("device $name: no enabled channels in band " . ($band['name'] ?? '?'));
         }
 
         $freqs = array_map('floatval', array_keys($enabled));
@@ -181,7 +191,7 @@ class ConfigGeneratorService
             $out[] = '    modulation = "nfm";';
             $out[] = '    outputs: ({';
             $out[] = '      type = "file";';
-            $out[] = '      directory = "' . ($device['mp3outdir'] ?? '/media/rx/sources') . '";';
+            $out[] = '      directory = "' . ($device['mp3outdir'] ?? DeviceService::DEFAULT_SOURCES_DIR) . '";';
             $out[] = '      filename_template = "' . $label . '";';
             $out[] = '      include_freq = true;';
             $out[] = '      split_on_transmission = true;';

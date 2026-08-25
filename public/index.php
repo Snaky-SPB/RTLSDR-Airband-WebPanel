@@ -8,10 +8,11 @@ use AirbandWebPanel\Services\ScannerStatusService;
 use AirbandWebPanel\Services\SystemInfoService;
 use AirbandWebPanel\Services\ConfigGeneratorService;
 use AirbandWebPanel\Services\DeviceService;
-use AirbandWebPanel\Services\ScanPresetService;
+use AirbandWebPanel\Services\PresetService;
 use AirbandWebPanel\Handlers\FrequencyHandler;
 use AirbandWebPanel\Handlers\SystemHandler;
 use AirbandWebPanel\Handlers\DeviceHandler;
+use AirbandWebPanel\Handlers\PresetHandler;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -39,11 +40,12 @@ $scannerStatusService = new ScannerStatusService();
 $systemInfoService = new SystemInfoService();
 $configGenerator = new ConfigGeneratorService($scannerStatusService);
 $deviceService = new DeviceService();
-$scanPresets = new ScanPresetService();
+$presetService = new PresetService();
 
 $frequencyHandler = new FrequencyHandler($fileScannerService);
-$systemHandler = new SystemHandler($scannerStatusService, $systemInfoService, $configGenerator, $deviceService);
-$deviceHandler = new DeviceHandler($deviceService, $scanPresets);
+$systemHandler = new SystemHandler($scannerStatusService, $systemInfoService, $configGenerator, $deviceService, $presetService);
+$deviceHandler = new DeviceHandler($deviceService, $presetService);
+$presetHandler = new PresetHandler($presetService, $deviceService);
 
 // Страница 1: сервис + устройства
 $app->get('/', function (Request $request, Response $response) {
@@ -64,25 +66,22 @@ $app->get('/device/{name}', function (Request $request, Response $response, arra
     return $response->withHeader('Content-Type', 'text/html; charset=utf-8');
 });
 
-// API: Устройства
+// API: Устройства (железо + режим + полоса)
 $app->get('/api/devices', [$deviceHandler, 'list']);
 $app->get('/api/devices/{name}', [$deviceHandler, 'get']);
 $app->post('/api/devices', [$deviceHandler, 'create']);
 $app->post('/api/devices/{name}', [$deviceHandler, 'update']);
 $app->delete('/api/devices/{name}', [$deviceHandler, 'delete']);
-$app->post('/api/devices/{name}/apply-preset', [$deviceHandler, 'applyPreset']);
-$app->post('/api/devices/{name}/worklist', [$deviceHandler, 'addWorklist']);
-$app->post('/api/devices/{name}/worklist/remove', [$deviceHandler, 'removeWorklist']);
-$app->post('/api/devices/{name}/worklist/toggle', [$deviceHandler, 'toggleWorklist']);
 
-// API: Scan-пресеты (только чтение)
-$app->get('/api/presets', function (Request $request, Response $response) use ($scanPresets): Response {
-    $response->getBody()->write(json_encode([
-        'success' => true,
-        'data' => $scanPresets->list(),
-    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    return $response->withHeader('Content-Type', 'application/json');
-});
+// API: Полосы (band-пресеты)
+$app->get('/api/presets', [$presetHandler, 'list']);
+$app->get('/api/presets/{name}', [$presetHandler, 'get']);
+$app->post('/api/presets', [$presetHandler, 'create']);
+$app->post('/api/presets/{name}', [$presetHandler, 'update']);
+$app->delete('/api/presets/{name}', [$presetHandler, 'delete']);
+$app->post('/api/presets/{name}/worklist', [$presetHandler, 'addWorklist']);
+$app->post('/api/presets/{name}/worklist/remove', [$presetHandler, 'removeWorklist']);
+$app->post('/api/presets/{name}/worklist/toggle', [$presetHandler, 'toggleWorklist']);
 
 // API: Список частот
 $app->get('/api/frequencies', [$frequencyHandler, 'list']);

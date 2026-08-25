@@ -10,6 +10,7 @@ use AirbandWebPanel\Services\ScannerStatusService;
 use AirbandWebPanel\Services\SystemInfoService;
 use AirbandWebPanel\Services\ConfigGeneratorService;
 use AirbandWebPanel\Services\DeviceService;
+use AirbandWebPanel\Services\PresetService;
 
 class SystemHandler
 {
@@ -17,17 +18,20 @@ class SystemHandler
     private SystemInfoService $infoService;
     private ConfigGeneratorService $generator;
     private DeviceService $deviceService;
+    private PresetService $presetService;
 
     public function __construct(
         ScannerStatusService $statusService,
         SystemInfoService $infoService,
         ConfigGeneratorService $generator,
-        DeviceService $deviceService
+        DeviceService $deviceService,
+        PresetService $presetService
     ) {
         $this->statusService = $statusService;
         $this->infoService = $infoService;
         $this->generator = $generator;
         $this->deviceService = $deviceService;
+        $this->presetService = $presetService;
     }
 
     /**
@@ -145,13 +149,26 @@ class SystemHandler
     }
 
     /**
-     * POST /api/system/config/generate - генерация и запись конфига из всех устройств (без рестарта)
+     * POST /api/system/config/generate - генерация и запись конфига (без рестарта).
+     * Каждое устройство с выбранной полосой → блок (железо + параметры полосы).
+     * Устройства без полосы пропускаются.
      */
     public function generateConfig(Request $request, Response $response): Response
     {
-        $devices = $this->deviceService->list();
+        $pairs = [];
+        $skipped = [];
+        foreach ($this->deviceService->list() as $device) {
+            $presetName = (string)($device['preset'] ?? '');
+            $band = $presetName !== '' ? $this->presetService->find($presetName) : null;
+            if ($band === null) {
+                $skipped[] = $device['name'];
+                continue;
+            }
+            $pairs[] = ['device' => $device, 'band' => $band];
+        }
+
         try {
-            $content = $this->generator->generate($devices);
+            $content = $this->generator->generate($pairs);
         } catch (\InvalidArgumentException $e) {
             $data = ['success' => false, 'error' => $e->getMessage()];
             $response->getBody()->write(json_encode($data, JSON_PRETTY_PRINT));
@@ -162,10 +179,10 @@ class SystemHandler
         $data = [
             'success' => $success,
             $success ? 'data' : 'error' => $success
-                ? ['devices' => count($devices)]
+                ? ['devices' => count($pairs), 'skipped' => $skipped]
                 : 'failed to write config',
         ];
-        $response->getBody()->write(json_encode($data, JSON_PRETTY_PRINT));
+        $response->getBody()->write(json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         return $response
             ->withStatus($success ? 200 : 500)
             ->withHeader('Content-Type', 'application/json');
