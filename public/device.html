@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTLSDR Airband WebPanel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            padding: 12px 8px;
+        }
+
+        .container { max-width: 1000px; margin: 0 auto; padding: 0 8px; }
+
+        .bar {
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .top-bar { margin-bottom: 10px; }
+        .back {
+            color: #1565c0;
+            text-decoration: none;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        .back:hover { text-decoration: underline; }
+        .device-title { font-size: 15px; font-weight: 600; }
+        .device-title .dev-serial { color: #757575; font-weight: 400; font-family: monospace; font-size: 13px; margin-left: 8px; }
+
+        .mode-toggle { display: flex; gap: 6px; }
+        .btn-mode {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            background: #f0f0f0;
+            color: #555;
+        }
+        .btn-mode.active { background: #e3f2fd; border-color: #90caf9; color: #1565c0; font-weight: 600; }
+        .btn-mode.active-scan { background: #e8f5e9; border-color: #a5d6a7; color: #2e7d32; font-weight: 600; }
+
+        .btn-save {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            background: #2e7d32;
+            color: #fff;
+        }
+        .btn-save:hover { background: #1b5e20; }
+
+        .section { flex-direction: column; align-items: stretch; }
+        .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .row label { font-size: 12px; color: #757575; display: flex; flex-direction: column; gap: 3px; }
+        .row input, .row select {
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #333;
+        }
+        .row .btn-apply {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        .row .btn-apply:hover { background: #bbdefb; }
+
+        table.worklist { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+        table.worklist th {
+            text-align: left;
+            color: #757575;
+            font-weight: 500;
+            padding: 6px 8px;
+            border-bottom: 1px solid #eee;
+        }
+        table.worklist td { padding: 6px 8px; border-bottom: 1px solid #f5f5f5; }
+        table.worklist tr:last-child td { border-bottom: none; }
+        table.worklist .wl-freq { font-family: monospace; }
+        table.worklist .wl-label { color: #666; }
+        .btn-wl-toggle {
+            border: none;
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-radius: 6px;
+            padding: 3px 10px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn-wl-toggle.off { background: #f0f0f0; color: #9e9e9e; }
+        .btn-wl-del {
+            border: none;
+            background: none;
+            color: #c62828;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .btn-wl-del:hover { background: #ffebee; }
+
+        .worklist-add { display: flex; gap: 8px; margin-top: 10px; }
+        .worklist-add input {
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 13px;
+            flex: 1;
+            max-width: 160px;
+        }
+        .worklist-add button {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .worklist-add button:hover { background: #c8e6c9; }
+        .no-worklist { color: #757575; font-size: 13px; padding: 6px 8px; }
+
+        .frequency-panel {
+            background: #fff;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            padding: 10px 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .controls-row { display: flex; align-items: center; gap: 10px; }
+        .btn-group {
+            display: flex;
+            gap: 4px;
+            background: #f5f5f5;
+            border-radius: 999px;
+            padding: 3px;
+        }
+        .btn-group button {
+            width: 32px; height: 32px;
+            border: none;
+            border-radius: 50%;
+            background: #f0f0f0;
+            cursor: pointer;
+            font-size: 15px;
+            color: #333;
+        }
+        .btn-group button:hover { background: #e0e0e0; }
+        .btn-group .btn-whitelist { color: #43a047; }
+        .btn-group .btn-delete { color: #c62828; }
+        .audio-wrapper { flex: 1; min-width: 120px; }
+        .audio-wrapper audio { width: 100%; height: 38px; }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+        }
+        .info-row .info-left { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .info-row .info-left .receiver { color: #999; }
+        .info-row .info-right { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .no-files { color: #757575; font-size: 13px; text-align: center; padding: 8px; }
+
+        .status-dot {
+            display: inline-block;
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #9e9e9e;
+            margin-right: 6px;
+        }
+        .status-dot.running { background: #43a047; }
+        .status-dot.stopped { background: #e53935; }
+
+        .bottom-bar { margin-top: 10px; margin-bottom: 0; font-size: 13px; color: #555; }
+        .sep { color: #ddd; margin: 0 4px; }
+
+        .flash-toast {
+            position: fixed;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #fff;
+            padding: 10px 18px;
+            border-radius: 6px;
+            font-size: 13px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 100;
+            max-width: 90%;
+        }
+        .flash-toast.show { opacity: 1; }
+        .flash-toast.error { background: #c62828; }
+
+        @media (max-width: 600px) {
+            .bar { padding: 8px 10px; }
+            .controls-row { gap: 4px; }
+            .btn-group button { width: 30px; height: 30px; font-size: 14px; }
+            .audio-wrapper audio { height: 34px; }
+            .frequency-panel { padding: 8px 10px; }
+            .info-row { font-size: 11px; }
+            .bottom-bar { font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="bar top-bar">
+            <a class="back" href="/">← Devices</a>
+            <span class="device-title"><span id="device-name">—</span><span class="dev-serial" id="device-serial"></span></span>
+            <div class="mode-toggle">
+                <button id="btn-mode-scan" class="btn-mode">wideband_scan</button>
+                <button id="btn-mode-receive" class="btn-mode">multichannel</button>
+            </div>
+            <button id="btn-save" class="btn-save">Save</button>
+        </div>
+
+        <div class="bar section" id="scan-section" style="display:none">
+            <div class="row">
+                <label>Scan preset
+                    <select id="preset-select"><option value="">—</option></select>
+                </label>
+                <button class="btn-apply" id="btn-apply-preset">Apply</button>
+            </div>
+            <div class="row">
+                <label>From (MHz)
+                    <input id="freq-from" type="number" step="0.0001">
+                </label>
+                <label>To (MHz)
+                    <input id="freq-to" type="number" step="0.0001">
+                </label>
+                <label>Step (kHz)
+                    <input id="channel-step" type="number" step="0.625">
+                </label>
+                <label>SCAN prefix
+                    <input id="scan-fname" placeholder="SCAN-...">
+                </label>
+            </div>
+        </div>
+
+        <div class="bar section" id="receive-section" style="display:none">
+            <span style="font-size:13px;color:#555">Work list — frequencies received in multichannel mode</span>
+            <div id="worklist-wrap"></div>
+            <div class="worklist-add">
+                <input id="wl-freq" placeholder="172.8125">
+                <input id="wl-label" placeholder="T">
+                <button id="btn-wl-add">Add</button>
+            </div>
+        </div>
+
+        <div id="panels"></div>
+        <p class="no-files" id="no-files" style="display:none">No scan recordings</p>
+
+        <div class="bar bottom-bar">
+            <span class="scanner-status"><span class="status-dot" id="status-dot"></span><span id="status-text">Scanner</span></span>
+            <span class="sep">|</span>
+            <span id="bottom-records">Records: —</span>
+            <span class="sep">|</span>
+            <span id="bottom-disk">Disk: —</span>
+            <span class="sep">|</span>
+            <span id="bottom-uptime">Uptime: —</span>
+        </div>
+
+        <div class="flash-toast" id="toast"></div>
+    </div>
+
+    <script>
+        const deviceName = decodeURIComponent(location.pathname.split('/')[2] || '');
+        let device = null;
+        let totalFiles = 0;
+
+        function showToast(msg, isError) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'flash-toast show' + (isError ? ' error' : '');
+            setTimeout(() => t.classList.remove('show'), 2500);
+        }
+
+        async function api(url, method = 'GET', body) {
+            const opts = { method };
+            if (body !== undefined) {
+                opts.headers = { 'Content-Type': 'application/json' };
+                opts.body = JSON.stringify(body);
+            }
+            const res = await fetch(url, opts);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+            return data;
+        }
+
+        function currentMode() { return device ? device.mode : 'wideband_scan'; }
+
+        function renderMode() {
+            if (!device) return;
+            const scan = currentMode() === 'wideband_scan';
+            document.getElementById('scan-section').style.display = scan ? '' : 'none';
+            document.getElementById('receive-section').style.display = scan ? 'none' : '';
+            document.getElementById('btn-mode-scan').className = 'btn-mode' + (scan ? ' active-scan' : '');
+            document.getElementById('btn-mode-receive').className = 'btn-mode' + (!scan ? ' active' : '');
+            // Панели записей видны только в scan-режиме
+            document.getElementById('panels').style.display = scan ? '' : 'none';
+            document.getElementById('no-files').style.display = (scan && !document.getElementById('panels').children.length) ? '' : 'none';
+        }
+
+        function fillScanFields() {
+            if (!device) return;
+            document.getElementById('freq-from').value = device.freq_from ?? '';
+            document.getElementById('freq-to').value = device.freq_to ?? '';
+            document.getElementById('channel-step').value = device.channel_step ?? 12.5;
+            document.getElementById('scan-fname').value = device.scan_fname ?? '';
+        }
+
+        function renderWorklist() {
+            const wrap = document.getElementById('worklist-wrap');
+            const workList = device.work_list || {};
+            const keys = Object.keys(workList).sort((a, b) => parseFloat(a) - parseFloat(b));
+            if (keys.length === 0) {
+                wrap.innerHTML = '<p class="no-worklist">No frequencies in work list</p>';
+                return;
+            }
+            let html = `<table class="worklist"><thead><tr>
+                <th>Frequency (MHz)</th><th>Label</th><th>Active</th><th></th></tr></thead><tbody>`;
+            for (const k of keys) {
+                const e = workList[k];
+                const enabled = e.enabled !== false;
+                html += `<tr>
+                    <td class="wl-freq">${k}</td>
+                    <td class="wl-label">${e.label}</td>
+                    <td><button class="btn-wl-toggle ${enabled ? '' : 'off'}" data-freq="${k}">${enabled ? 'on' : 'off'}</button></td>
+                    <td style="text-align:right"><button class="btn-wl-del" data-freq="${k}">×</button></td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            wrap.innerHTML = html;
+            wrap.querySelectorAll('.btn-wl-toggle').forEach(btn => btn.onclick = () => toggleWorklist(btn.dataset.freq));
+            wrap.querySelectorAll('.btn-wl-del').forEach(btn => btn.onclick = () => removeWorklist(btn.dataset.freq));
+        }
+
+        async function loadPresets() {
+            try {
+                const data = await api('/api/presets');
+                const sel = document.getElementById('preset-select');
+                sel.innerHTML = '<option value="">—</option>';
+                for (const p of (data.data || [])) {
+                    const opt = document.createElement('option');
+                    opt.value = p.name;
+                    opt.textContent = `${p.name} (${p.freq_from}–${p.freq_to} MHz, ${p.channel_step} kHz)`;
+                    sel.appendChild(opt);
+                }
+            } catch (e) { /* без пресетов — пусто */ }
+        }
+
+        async function loadDevice() {
+            const data = await api('/api/devices/' + encodeURIComponent(deviceName));
+            device = data.data;
+            document.getElementById('device-name').textContent = device.name;
+            document.getElementById('device-serial').textContent = `${device.type} · ${device.serial} · gain ${device.gain}`;
+            document.title = device.name + ' — RTLSDR Airband WebPanel';
+            fillScanFields();
+            renderMode();
+            renderWorklist();
+            loadPresets();
+            loadPanels();
+        }
+
+        async function saveDevice() {
+            if (!device) return;
+            const body = { mode: currentMode() };
+            if (currentMode() === 'wideband_scan') {
+                body.freq_from = parseFloat(document.getElementById('freq-from').value);
+                body.freq_to = parseFloat(document.getElementById('freq-to').value);
+                body.channel_step = parseFloat(document.getElementById('channel-step').value || '12.5');
+                const fname = document.getElementById('scan-fname').value.trim();
+                if (fname) body.scan_fname = fname;
+            }
+            try {
+                const data = await api('/api/devices/' + encodeURIComponent(deviceName), 'POST', body);
+                device = data.data;
+                fillScanFields();
+                renderMode();
+                showToast('Saved');
+                loadPanels();
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function applyPreset() {
+            const name = document.getElementById('preset-select').value;
+            if (!name) { showToast('Select a preset first', true); return; }
+            try {
+                await api(`/api/devices/${encodeURIComponent(deviceName)}/apply-preset`, 'POST', { preset: name });
+                showToast('Preset applied — Generate config, then Restart');
+                loadDevice();
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function toggleWorklist(freq) {
+            try {
+                const data = await api(`/api/devices/${encodeURIComponent(deviceName)}/worklist/toggle`, 'POST', { freq });
+                device.work_list[freq].enabled = data.data.enabled;
+                renderWorklist();
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function removeWorklist(freq) {
+            try {
+                await api(`/api/devices/${encodeURIComponent(deviceName)}/worklist/remove`, 'POST', { freq });
+                delete device.work_list[freq];
+                renderWorklist();
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function addWorklist() {
+            const freq = document.getElementById('wl-freq').value.trim();
+            const label = document.getElementById('wl-label').value.trim();
+            if (!freq) { showToast('Enter a frequency', true); return; }
+            try {
+                await api(`/api/devices/${encodeURIComponent(deviceName)}/worklist`, 'POST', { freq, label });
+                document.getElementById('wl-freq').value = '';
+                document.getElementById('wl-label').value = '';
+                loadDevice();
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        function updateRecords(count) {
+            document.getElementById('bottom-records').textContent = 'Records: ' + count;
+        }
+
+        function stopOtherAudio(current) {
+            document.querySelectorAll('#panels audio').forEach(a => { if (a !== current) a.pause(); });
+        }
+
+        async function loadPanels() {
+            const panels = document.getElementById('panels');
+            panels.innerHTML = '';
+            totalFiles = 0;
+            if (!device || currentMode() !== 'wideband_scan') { renderMode(); return; }
+            try {
+                const res = await fetch('/api/frequencies');
+                const freqData = await res.json();
+                const myReceiver = device.scan_fname;
+                const items = (freqData.data || []).filter(it => it.receiver === myReceiver);
+                if (items.length === 0) { renderMode(); return; }
+                for (const item of items) {
+                    const panel = document.createElement('div');
+                    panel.className = 'frequency-panel';
+                    panel.dataset.receiver = item.receiver;
+                    const mhzVal = parseFloat(item.frequencyMhz);
+                    panel.innerHTML = `
+                        <div class="controls-row">
+                            <div class="btn-group">
+                                <button class="btn-prev" title="Previous file">&#9198;</button>
+                                <button class="btn-next" title="Next file">&#9197;</button>
+                            </div>
+                            <div class="audio-wrapper"><audio controls></audio></div>
+                            <div class="btn-group">
+                                <button class="btn-delete" title="Delete files">&#128465;</button>
+                                <button class="btn-whitelist" title="Add to work list">&#8853;</button>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-left">${item.frequencyMhz} <span class="receiver">(${item.receiver})</span></span>
+                            <span class="info-right"></span>
+                        </div>`;
+                    panels.appendChild(panel);
+
+                    const audio = panel.querySelector('audio');
+                    const infoRight = panel.querySelector('.info-right');
+                    let files = [];
+                    let currentIdx = 0;
+
+                    function setFile(file, autoplay) {
+                        audio.src = '/api/files/' + file.filename + '/stream';
+                        audio.load();
+                        if (autoplay) audio.play();
+                        infoRight.textContent = file.filename;
+                    }
+
+                    async function deleteAndRefresh() {
+                        if (files.length === 0) return;
+                        const wasPlaying = !audio.paused;
+                        const oldCount = files.length;
+                        await fetch(`/api/frequencies/${item.frequency}/${encodeURIComponent(item.receiver)}/delete`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: '{}'
+                        });
+                        const res = await fetch(`/api/frequencies/${item.frequency}/${encodeURIComponent(item.receiver)}`);
+                        const data = await res.json();
+                        files = data.data.files || [];
+                        totalFiles -= (oldCount - files.length);
+                        updateRecords(totalFiles);
+                        currentIdx = 0;
+                        if (files.length > 0) {
+                            setFile(files[0], wasPlaying);
+                        } else {
+                            audio.removeAttribute('src');
+                            audio.load();
+                            infoRight.textContent = '';
+                            panel.style.display = 'none';
+                            renderMode();
+                        }
+                    }
+
+                    async function loadFiles() {
+                        const res = await fetch(`/api/frequencies/${item.frequency}/${encodeURIComponent(item.receiver)}`);
+                        const data = await res.json();
+                        files = data.data.files || [];
+                        totalFiles += files.length;
+                        if (files.length > 0) setFile(files[0], false);
+                        else panel.style.display = 'none';
+                    }
+
+                    audio.addEventListener('play', () => stopOtherAudio(audio));
+                    audio.onended = () => { if (currentIdx < files.length - 1) setFile(files[++currentIdx], true); };
+                    panel.querySelector('.btn-prev').onclick = () => { if (currentIdx > 0) setFile(files[--currentIdx], false); };
+                    panel.querySelector('.btn-next').onclick = () => { if (currentIdx < files.length - 1) setFile(files[++currentIdx], false); };
+                    panel.querySelector('.btn-delete').onclick = deleteAndRefresh;
+                    panel.querySelector('.btn-whitelist').onclick = async () => {
+                        if (files.length === 0) return;
+                        const label = prompt('Label for ' + mhzVal.toFixed(4) + ' MHz:', 'marked');
+                        if (label === null) return;
+                        try {
+                            await api(`/api/devices/${encodeURIComponent(deviceName)}/worklist`, 'POST', {
+                                freq: mhzVal.toFixed(4), label: label || 'marked'
+                            });
+                            showToast('Added to work list');
+                            renderWorklist();
+                            await deleteAndRefresh();
+                        } catch (e) {
+                            showToast(e.message, true);
+                        }
+                    };
+
+                    await loadFiles();
+                }
+                updateRecords(totalFiles);
+            } catch (e) {
+                showToast('Failed to load frequencies: ' + e.message, true);
+            }
+            renderMode();
+        }
+
+        async function fetchStatus() {
+            try {
+                const data = await api('/api/system/status');
+                const s = data.data.scanner;
+                const dot = document.getElementById('status-dot');
+                dot.className = 'status-dot ' + (s.running ? 'running' : 'stopped');
+                document.getElementById('status-text').textContent = s.status;
+                document.getElementById('bottom-disk').textContent = 'Disk: ' + data.data.disk.percent + '% used';
+                document.getElementById('bottom-uptime').textContent = 'Uptime: ' + data.data.uptime;
+            } catch (e) { /* keep last state */ }
+        }
+
+        document.getElementById('btn-mode-scan').onclick = () => { device.mode = 'wideband_scan'; renderMode(); };
+        document.getElementById('btn-mode-receive').onclick = () => { device.mode = 'multichannel'; renderMode(); };
+        document.getElementById('btn-save').onclick = saveDevice;
+        document.getElementById('btn-apply-preset').onclick = applyPreset;
+        document.getElementById('btn-wl-add').onclick = addWorklist;
+
+        if (!deviceName) {
+            document.getElementById('device-name').textContent = 'Device not found in URL';
+        } else {
+            fetchStatus();
+            loadDevice().catch(e => showToast(e.message, true));
+            setInterval(fetchStatus, 5000);
+        }
+    </script>
+</body>
+</html>

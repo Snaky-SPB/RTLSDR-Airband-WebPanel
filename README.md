@@ -1,4 +1,4 @@
-# Radio Scanner Web Interface
+# RTLSDR Airband WebPanel
 
 Веб-интерфейс для управления радиосканером на базе rtl_airband.
 
@@ -26,7 +26,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Snaky-SPB/RTLSDR-Airband-Web
 
 ```bash
 sudo ./install.sh    # первый раз
-sudo ./deploy.sh     # обновление: rsync в /opt/radio-scanner-web + reload apache
+sudo ./deploy.sh     # обновление: rsync в /opt/rtl-sdr-airband-webpanel + reload apache
 ```
 
 ### Доступ
@@ -37,14 +37,18 @@ sudo ./deploy.sh     # обновление: rsync в /opt/radio-scanner-web + r
 
 ```
 .
-├── public/              # Точка входа (index.php)
+├── public/
+│   ├── index.php        # Точка входа (Slim 4, роуты)
+│   ├── dashboard.html   # Страница 1: сервис + устройства
+│   └── device.html      # Страница 2: частоты устройства
 ├── src/                 # Исходный код PHP
 │   ├── Handlers/        # API обработчики
-│   ├── Services/        # Бизнес-логика
-│   └── Models/          # Модели данных
-├── templates/           # Twig шаблоны
-├── config/              # Конфигурация
-├── install.sh           # Скрипт установки
+│   └── Services/        # Бизнес-логика
+├── devices/             # Устройства (один JSON на приёмник) — данные сервера
+├── presets/             # Scan-пресеты (read-only, файлы вручную) — данные сервера
+├── scripts/             # install-radio-scanner.sh (установка системы)
+├── install.sh           # Установка веб-панели
+├── deploy.sh            # Обновление (rsync)
 └── wiki/                # Документация
 ```
 

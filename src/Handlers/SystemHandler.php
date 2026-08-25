@@ -2,28 +2,32 @@
 
 declare(strict_types=1);
 
-namespace RadioScanner\Handlers;
+namespace AirbandWebPanel\Handlers;
 
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use RadioScanner\Services\ScannerStatusService;
-use RadioScanner\Services\SystemInfoService;
-use RadioScanner\Services\ConfigGeneratorService;
+use AirbandWebPanel\Services\ScannerStatusService;
+use AirbandWebPanel\Services\SystemInfoService;
+use AirbandWebPanel\Services\ConfigGeneratorService;
+use AirbandWebPanel\Services\DeviceService;
 
 class SystemHandler
 {
     private ScannerStatusService $statusService;
     private SystemInfoService $infoService;
     private ConfigGeneratorService $generator;
+    private DeviceService $deviceService;
 
     public function __construct(
         ScannerStatusService $statusService,
         SystemInfoService $infoService,
-        ConfigGeneratorService $generator
+        ConfigGeneratorService $generator,
+        DeviceService $deviceService
     ) {
         $this->statusService = $statusService;
         $this->infoService = $infoService;
         $this->generator = $generator;
+        $this->deviceService = $deviceService;
     }
 
     /**
@@ -42,7 +46,8 @@ class SystemHandler
                 'scanner' => [
                     'running' => $scannerRunning,
                     'status' => $scannerRunning ? 'running' : 'stopped',
-                    'mode' => $this->generator->getActiveMode(),
+                    'enabled' => $this->statusService->isEnabled(),
+                    'modes' => $this->generator->getDeviceModes(),
                 ],
                 'disk' => [
                     'total' => $this->formatBytes($diskUsage['total']),
@@ -117,6 +122,64 @@ class SystemHandler
             ],
         ];
 
+        $response->getBody()->write(json_encode($data, JSON_PRETTY_PRINT));
+        return $response
+            ->withStatus($success ? 200 : 500)
+            ->withHeader('Content-Type', 'application/json');
+    }
+
+    /**
+     * POST /api/system/service/enable - включить rtl_airband на автозагрузке
+     */
+    public function enableService(Request $request, Response $response): Response
+    {
+        return $this->serviceAction($response, 'enable', $this->statusService->enable());
+    }
+
+    /**
+     * POST /api/system/service/disable - выключить rtl_airband с автозагрузки
+     */
+    public function disableService(Request $request, Response $response): Response
+    {
+        return $this->serviceAction($response, 'disable', $this->statusService->disable());
+    }
+
+    /**
+     * POST /api/system/config/generate - генерация и запись конфига из всех устройств (без рестарта)
+     */
+    public function generateConfig(Request $request, Response $response): Response
+    {
+        $devices = $this->deviceService->list();
+        try {
+            $content = $this->generator->generate($devices);
+        } catch (\InvalidArgumentException $e) {
+            $data = ['success' => false, 'error' => $e->getMessage()];
+            $response->getBody()->write(json_encode($data, JSON_PRETTY_PRINT));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+
+        $success = $this->generator->write($content);
+        $data = [
+            'success' => $success,
+            $success ? 'data' : 'error' => $success
+                ? ['devices' => count($devices)]
+                : 'failed to write config',
+        ];
+        $response->getBody()->write(json_encode($data, JSON_PRETTY_PRINT));
+        return $response
+            ->withStatus($success ? 200 : 500)
+            ->withHeader('Content-Type', 'application/json');
+    }
+
+    private function serviceAction(Response $response, string $action, bool $success): Response
+    {
+        $data = [
+            'success' => $success,
+            'data' => [
+                'action' => $action,
+                'result' => $success ? 'ok' : 'failed',
+            ],
+        ];
         $response->getBody()->write(json_encode($data, JSON_PRETTY_PRINT));
         return $response
             ->withStatus($success ? 200 : 500)

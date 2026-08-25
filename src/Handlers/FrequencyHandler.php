@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace RadioScanner\Handlers;
+namespace AirbandWebPanel\Handlers;
 
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use RadioScanner\Services\FileScannerService;
+use AirbandWebPanel\Services\FileScannerService;
 
 class FrequencyHandler
 {

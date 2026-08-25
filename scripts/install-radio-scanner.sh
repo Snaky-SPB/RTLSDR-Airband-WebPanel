@@ -38,7 +38,7 @@ CLONE_DIR_WEBPANEL="/opt/src/RTLSDR-Airband-WebPanel"
 
 RTL_AIRBAND_CONF="/usr/local/etc/rtl_airband.conf"
 SOURCES_DIR="/media/rx/sources"
-WEBPANEL_APP_DIR="/opt/radio-scanner-web"
+WEBPANEL_APP_DIR="/opt/rtl-sdr-airband-webpanel"
 
 log() { echo "[install] $*"; }
 die() { echo "[install] ERROR: $*" >&2; exit 1; }

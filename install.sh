@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Radio Scanner Web Interface - Installation Script
+# RTLSDR Airband WebPanel - Installation Script
 # Устанавливает все зависимости и настраивает приложение на сервере
 
 set -e
 
-echo "=== Radio Scanner Web Interface - Installation ==="
+echo "=== RTLSDR Airband WebPanel - Installation ==="
 echo ""
 
 # Проверка прав root
@@ -15,9 +15,9 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Конфигурация
-APP_DIR="/opt/radio-scanner-web"
+APP_DIR="/opt/rtl-sdr-airband-webpanel"
 SOURCE_DIR="${SOURCE_DIR:-$(cd "$(dirname "$0")" && pwd)}"
-LOG_DIR="/var/log/radio-scanner"
+LOG_DIR="/var/log/rtl-sdr-airband-webpanel"
 SOURCES_DIR="/media/rx/sources"
 RTL_AIRBAND_CONF="/etc/rtl_airband.conf"
 WEB_PORT="80"
@@ -62,10 +62,12 @@ if [ -d "$SOURCE_DIR" ]; then
         --exclude='.git/' \
         --exclude='node_modules/' \
         --exclude='presets/' \
+        --exclude='devices/' \
         "$SOURCE_DIR/" "$APP_DIR/"
     echo "  Файлы скопированы из $SOURCE_DIR"
     mkdir -p "$APP_DIR/presets"
-    echo "  Каталог presets/ готов"
+    mkdir -p "$APP_DIR/devices"
+    echo "  Каталоги presets/ и devices/ готовы"
 else
     echo "  WARNING: Исходный каталог $SOURCE_DIR не найден, пропускаем"
 fi
@@ -87,7 +89,7 @@ echo "[7/10] Настройка Apache..."
 a2dissite 000-default.conf 2>/dev/null || true
 
 # Создаём конфигурацию для приложения
-cat > /etc/apache2/sites-available/radio-scanner.conf << EOF
+cat > /etc/apache2/sites-available/rtl-sdr-airband-webpanel.conf << EOF
 <VirtualHost *:$WEB_PORT>
     ServerAdmin webmaster@localhost
     DocumentRoot $APP_DIR/public
@@ -103,7 +105,7 @@ cat > /etc/apache2/sites-available/radio-scanner.conf << EOF
 </VirtualHost>
 EOF
 
-a2ensite radio-scanner.conf
+a2ensite rtl-sdr-airband-webpanel.conf
 a2enmod rewrite
 
 # Шаг 8: Настройка sudo для управления сканером
@@ -122,7 +124,7 @@ create_sudoers() {
 }
 
 create_sudoers /etc/sudoers.d/www-data-rtl-airband \
-    'www-data ALL=(root) NOPASSWD: /usr/bin/systemctl restart rtl_airband, /usr/bin/systemctl stop rtl_airband, /usr/bin/systemctl start rtl_airband'
+    'www-data ALL=(root) NOPASSWD: /usr/bin/systemctl restart rtl_airband, /usr/bin/systemctl stop rtl_airband, /usr/bin/systemctl start rtl_airband, /usr/bin/systemctl enable rtl_airband, /usr/bin/systemctl disable rtl_airband, /usr/bin/systemctl is-enabled rtl_airband'
 
 create_sudoers /etc/sudoers.d/www-data-rtl-airband-cp \
     'www-data ALL=(root) NOPASSWD: /usr/bin/cp /tmp/rtl_airband_tmp /usr/local/etc/rtl_airband.conf'
@@ -135,7 +137,7 @@ cd "$APP_DIR"
 if [ ! -f "composer.json" ]; then
     cat > composer.json << 'EOF'
 {
-    "name": "radio-scanner/web-interface",
+    "name": "snaky/rtl-sdr-airband-webpanel",
     "description": "Web interface for rtl_airband radio scanner",
     "type": "project",
     "require": {
@@ -143,11 +145,12 @@ if [ ! -f "composer.json" ]; then
         "slim/slim": "^4.0",
         "slim/php-view": "^3.0",
         "slim/flash": "^0.4.0",
-        "twig/twig": "^3.0"
+        "twig/twig": "^3.0",
+        "laminas/laminas-diactoros": "^3.0"
     },
     "autoload": {
         "psr-4": {
-            "RadioScanner\\": "src/"
+            "AirbandWebPanel\\": "src/"
         }
     },
     "config": {

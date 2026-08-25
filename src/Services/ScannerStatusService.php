@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace RadioScanner\Services;
+namespace AirbandWebPanel\Services;
 
 class ScannerStatusService
 {
@@ -82,6 +82,33 @@ class ScannerStatusService
     public function start(): bool
     {
         exec('sudo systemctl start rtl_airband 2>&1', $output, $returnCode);
+        return $returnCode === 0;
+    }
+
+    /**
+     * Включён ли rtl_airband на автозагрузке
+     */
+    public function isEnabled(): bool
+    {
+        exec('sudo systemctl is-enabled rtl_airband 2>&1', $output, $returnCode);
+        return $returnCode === 0;
+    }
+
+    /**
+     * Включить rtl_airband на автозагрузке
+     */
+    public function enable(): bool
+    {
+        exec('sudo systemctl enable rtl_airband 2>&1', $output, $returnCode);
+        return $returnCode === 0;
+    }
+
+    /**
+     * Выключить rtl_airband с автозагрузки
+     */
+    public function disable(): bool
+    {
+        exec('sudo systemctl disable rtl_airband 2>&1', $output, $returnCode);
         return $returnCode === 0;
     }
 }

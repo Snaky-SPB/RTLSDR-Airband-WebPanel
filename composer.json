@@ -1,5 +1,5 @@
 {
-    "name": "radio-scanner/web-interface",
+    "name": "snaky/rtl-sdr-airband-webpanel",
     "description": "Web interface for rtl_airband radio scanner",
     "type": "project",
     "require": {
@@ -12,7 +12,7 @@
     },
     "autoload": {
         "psr-4": {
-            "RadioScanner\\": "src/"
+            "AirbandWebPanel\\": "src/"
         }
     },
     "config": {

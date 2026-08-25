@@ -3,14 +3,15 @@
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Factory\AppFactory;
-use Slim\Views\PhpRenderer;
-use RadioScanner\Services\FileScannerService;
-use RadioScanner\Services\ScannerStatusService;
-use RadioScanner\Services\SystemInfoService;
-use RadioScanner\Services\ConfigGeneratorService;
-use RadioScanner\Handlers\FrequencyHandler;
-use RadioScanner\Handlers\SystemHandler;
-use RadioScanner\Handlers\PresetHandler;
+use AirbandWebPanel\Services\FileScannerService;
+use AirbandWebPanel\Services\ScannerStatusService;
+use AirbandWebPanel\Services\SystemInfoService;
+use AirbandWebPanel\Services\ConfigGeneratorService;
+use AirbandWebPanel\Services\DeviceService;
+use AirbandWebPanel\Services\ScanPresetService;
+use AirbandWebPanel\Handlers\FrequencyHandler;
+use AirbandWebPanel\Handlers\SystemHandler;
+use AirbandWebPanel\Handlers\DeviceHandler;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -19,6 +20,9 @@ $app = AppFactory::create();
 
 // Middleware для обработки ошибок
 $errorMiddleware = $app->addErrorMiddleware(true, true, true);
+
+// Middleware для парсинга тела запроса (JSON)
+$app->addBodyParsingMiddleware();
 
 // Middleware для CORS (для разработки)
 $app->add(function (Request $request, $handler): Response {
@@ -33,50 +37,51 @@ $app->add(function (Request $request, $handler): Response {
 $fileScannerService = new FileScannerService('/media/rx/sources');
 $scannerStatusService = new ScannerStatusService();
 $systemInfoService = new SystemInfoService();
-
 $configGenerator = new ConfigGeneratorService($scannerStatusService);
+$deviceService = new DeviceService();
+$scanPresets = new ScanPresetService();
+
 $frequencyHandler = new FrequencyHandler($fileScannerService);
-$systemHandler = new SystemHandler($scannerStatusService, $systemInfoService, $configGenerator);
-$presetHandler = new PresetHandler($configGenerator);
+$systemHandler = new SystemHandler($scannerStatusService, $systemInfoService, $configGenerator, $deviceService);
+$deviceHandler = new DeviceHandler($deviceService, $scanPresets);
 
-$view = new PhpRenderer(__DIR__ . '/../templates');
-
-// Главная страница
+// Страница 1: сервис + устройства
 $app->get('/', function (Request $request, Response $response) {
-    $response->getBody()->write('
-        <!DOCTYPE html>
-        <html lang="ru">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Radio Scanner</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 40px; background: #1a1a2e; color: #eee; }
-                h1 { color: #00d9ff; }
-                .status { padding: 20px; background: #16213e; border-radius: 8px; margin-top: 20px; }
-                .info { color: #888; }
-                a { color: #00d9ff; }
-            </style>
-        </head>
-        <body>
-            <h1>📻 Radio Scanner Web Interface</h1>
-            <div class="status">
-                <h2>Статус</h2>
-                <p>Приложение запущено успешно!</p>
-                <p><a href="/app">Перейти к плееру</a></p>
-                <p class="info">API: <code>/api/frequencies</code>, <code>/api/system/status</code></p>
-            </div>
-        </body>
-        </html>
-    ');
-    return $response;
-});
-
-// Страница приложения (статический HTML)
-$app->get('/app', function (Request $request, Response $response) {
-    $html = file_get_contents(__DIR__ . '/app.html');
+    $html = file_get_contents(__DIR__ . '/dashboard.html');
     $response->getBody()->write($html);
     return $response->withHeader('Content-Type', 'text/html; charset=utf-8');
+});
+
+// Страница 2: частоты устройства
+$app->get('/device/{name}', function (Request $request, Response $response, array $args) use ($deviceService): Response {
+    $name = (string)($args['name'] ?? '');
+    if ($deviceService->find($name) === null) {
+        $response->getBody()->write("Device not found: $name");
+        return $response->withStatus(404)->withHeader('Content-Type', 'text/plain; charset=utf-8');
+    }
+    $html = file_get_contents(__DIR__ . '/device.html');
+    $response->getBody()->write($html);
+    return $response->withHeader('Content-Type', 'text/html; charset=utf-8');
+});
+
+// API: Устройства
+$app->get('/api/devices', [$deviceHandler, 'list']);
+$app->get('/api/devices/{name}', [$deviceHandler, 'get']);
+$app->post('/api/devices', [$deviceHandler, 'create']);
+$app->post('/api/devices/{name}', [$deviceHandler, 'update']);
+$app->delete('/api/devices/{name}', [$deviceHandler, 'delete']);
+$app->post('/api/devices/{name}/apply-preset', [$deviceHandler, 'applyPreset']);
+$app->post('/api/devices/{name}/worklist', [$deviceHandler, 'addWorklist']);
+$app->post('/api/devices/{name}/worklist/remove', [$deviceHandler, 'removeWorklist']);
+$app->post('/api/devices/{name}/worklist/toggle', [$deviceHandler, 'toggleWorklist']);
+
+// API: Scan-пресеты (только чтение)
+$app->get('/api/presets', function (Request $request, Response $response) use ($scanPresets): Response {
+    $response->getBody()->write(json_encode([
+        'success' => true,
+        'data' => $scanPresets->list(),
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    return $response->withHeader('Content-Type', 'application/json');
 });
 
 // API: Список частот
@@ -102,15 +107,12 @@ $app->post('/api/system/scanner/restart', [$systemHandler, 'restartScanner']);
 $app->post('/api/system/scanner/stop', [$systemHandler, 'stopScanner']);
 $app->post('/api/system/scanner/start', [$systemHandler, 'startScanner']);
 
-// API: Пресеты конфигурации
-$app->get('/api/presets', [$presetHandler, 'list']);
-$app->get('/api/presets/active', [$presetHandler, 'getActive']);
-$app->post('/api/presets', [$presetHandler, 'create']);
-$app->delete('/api/presets/{name}', [$presetHandler, 'delete']);
-$app->post('/api/presets/{name}/apply-scan', [$presetHandler, 'applyScan']);
-$app->post('/api/presets/{name}/apply-receive', [$presetHandler, 'applyReceive']);
-$app->post('/api/presets/{name}/worklist', [$presetHandler, 'addWorklist']);
-$app->post('/api/presets/{name}/worklist/remove', [$presetHandler, 'removeWorklist']);
+// API: Автозагрузка
+$app->post('/api/system/service/enable', [$systemHandler, 'enableService']);
+$app->post('/api/system/service/disable', [$systemHandler, 'disableService']);
+
+// API: Генерация конфига
+$app->post('/api/system/config/generate', [$systemHandler, 'generateConfig']);
 
 // Health check
 $app->get('/api/health', function (Request $request, Response $response) {
@@ -119,7 +121,7 @@ $app->get('/api/health', function (Request $request, Response $response) {
         'timestamp' => date('c'),
         'php_version' => PHP_VERSION
     ];
-    
+
     $response->getBody()->write(json_encode($data, JSON_PRETTY_PRINT));
     return $response->withHeader('Content-Type', 'application/json');
 });

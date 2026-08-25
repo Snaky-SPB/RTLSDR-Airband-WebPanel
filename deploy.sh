@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Radio Scanner Web Interface - Deploy Script
+# RTLSDR Airband WebPanel - Deploy Script
 # Быстрая синхронизация файлов из исходного каталога в рабочий
 
 set -e
 
-APP_DIR="/opt/radio-scanner-web"
+APP_DIR="/opt/rtl-sdr-airband-webpanel"
 SOURCE_DIR="${SOURCE_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 
 # Проверка прав root
@@ -27,7 +27,7 @@ if [ ! -d "$APP_DIR" ]; then
     exit 1
 fi
 
-echo "=== Deploy Radio Scanner ==="
+echo "=== Deploy RTLSDR Airband WebPanel ==="
 echo "  Source: $SOURCE_DIR"
 echo "  Target: $APP_DIR"
 echo ""
@@ -40,10 +40,12 @@ rsync -a --delete \
     --exclude='.git/' \
     --exclude='node_modules/' \
     --exclude='presets/' \
+    --exclude='devices/' \
     "$SOURCE_DIR/" "$APP_DIR/"
 
-# Каталог presets/ если ещё нет
+# Каталоги данных (presets/, devices/) если ещё нет
 mkdir -p "$APP_DIR/presets"
+mkdir -p "$APP_DIR/devices"
 
 # Права
 echo "Setting permissions..."

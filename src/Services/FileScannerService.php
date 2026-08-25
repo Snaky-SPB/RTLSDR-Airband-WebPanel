@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace RadioScanner\Services;
+namespace AirbandWebPanel\Services;
 
 class FileScannerService
 {
