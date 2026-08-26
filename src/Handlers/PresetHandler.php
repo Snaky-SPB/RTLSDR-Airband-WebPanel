@@ -105,7 +105,8 @@ class PresetHandler
 
     /**
      * POST /api/presets/{name}/worklist - добавить частоту в полосу
-     * Body: { "freq": "172.8125", "label": "T" } (label опционален)
+     * Body: { "freq": "172.8125", "label": "T", "enabled": true }
+     * (label и enabled опциональны; enabled по умолчанию true)
      */
     public function addWorklist(Request $request, Response $response, array $args): Response
     {
@@ -126,9 +127,10 @@ class PresetHandler
         if (!preg_match('/^[A-Za-z0-9_-]+$/', $label)) {
             return $this->respond($response, ['success' => false, 'error' => 'Invalid label'], 400);
         }
+        $enabled = array_key_exists('enabled', $body) ? (bool)$body['enabled'] : true;
 
         $freqKey = sprintf('%.4f', (float)$freq);
-        $band['work_list'][$freqKey] = ['label' => $label, 'enabled' => true];
+        $band['work_list'][$freqKey] = ['label' => $label, 'enabled' => $enabled];
 
         try {
             $this->presetService->update($name, ['work_list' => $band['work_list']]);

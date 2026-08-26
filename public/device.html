@@ -31,73 +31,67 @@
 
         .top-bar { margin-bottom: 10px; }
         .back {
-            color: #1565c0;
+            color: #333;
             text-decoration: none;
-            font-size: 14px;
+            font-size: 13px;
             white-space: nowrap;
         }
         .back:hover { text-decoration: underline; }
-        .device-title { font-size: 15px; font-weight: 600; }
-        .device-title .dev-serial { color: #757575; font-weight: 400; font-family: monospace; font-size: 13px; margin-left: 8px; }
+        .device-title { font-size: 14px; font-weight: 600; }
 
         .mode-toggle { display: flex; gap: 6px; }
         .btn-mode {
-            padding: 6px 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            background: #f0f0f0;
-            color: #555;
-        }
-        .btn-mode.active { background: #e3f2fd; border-color: #90caf9; color: #1565c0; font-weight: 600; }
-        .btn-mode.active-scan { background: #e8f5e9; border-color: #a5d6a7; color: #2e7d32; font-weight: 600; }
-
-        .btn-save {
             padding: 6px 14px;
-            border: none;
-            border-radius: 6px;
+            border: 1px solid #d4d4d4;
+            border-radius: 4px;
             cursor: pointer;
             font-size: 13px;
-            background: #2e7d32;
-            color: #fff;
+            background: #fff;
+            color: #333;
+            transition: background 0.15s;
         }
-        .btn-save:hover { background: #1b5e20; }
+        .btn-mode:hover { background: #f0f0f0; }
+        .btn-mode.active { background: #333; border-color: #333; color: #fff; }
+
+        .btn {
+            padding: 6px 14px;
+            border: 1px solid #d4d4d4;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            background: #fff;
+            color: #333;
+            transition: background 0.15s;
+        }
+        .btn:hover { background: #f0f0f0; }
+        .btn:disabled { opacity: 0.45; cursor: default; }
+        .btn-sm { padding: 4px 10px; }
+        .btn-primary { background: #333; border-color: #333; color: #fff; }
+        .btn-primary:hover { background: #4a4a4a; }
 
         .section { flex-direction: column; align-items: stretch; }
-        .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-        .row label { font-size: 12px; color: #757575; display: flex; flex-direction: column; gap: 3px; }
-        .row input, .row select {
+        .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .row select {
             padding: 6px 8px;
             border: 1px solid #ddd;
-            border-radius: 6px;
+            border-radius: 4px;
             font-size: 13px;
             color: #333;
         }
-        .row .btn-apply {
-            padding: 6px 14px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            background: #e3f2fd;
-            color: #1565c0;
-        }
-        .row .btn-apply:hover { background: #bbdefb; }
-        .row .btn-new {
-            padding: 6px 14px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-        .row .btn-new:hover { background: #c8e6c9; }
 
         .section-title { font-size: 13px; font-weight: 600; color: #555; margin: 4px 0 8px; }
-        .section-sub { font-size: 12px; color: #757575; margin: 8px 0 6px; }
         .band-empty { color: #757575; font-size: 13px; padding: 6px 0; }
+
+        .band-form { width: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin-top: 10px; }
+        .band-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #757575; }
+        .band-form input {
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #333;
+        }
+        .band-form .form-actions { display: flex; flex-direction: row; align-items: flex-end; gap: 8px; }
 
         table.worklist { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
         table.worklist th {
@@ -109,18 +103,27 @@
         }
         table.worklist td { padding: 6px 8px; border-bottom: 1px solid #f5f5f5; }
         table.worklist tr:last-child td { border-bottom: none; }
+        table.worklist tfoot { border-top: 1px solid #eee; }
+        table.worklist tfoot input {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #333;
+        }
         table.worklist .wl-freq { font-family: monospace; }
         table.worklist .wl-label { color: #666; }
         .btn-wl-toggle {
-            border: none;
-            background: #e8f5e9;
-            color: #2e7d32;
-            border-radius: 6px;
+            border: 1px solid #333;
+            background: #333;
+            color: #fff;
+            border-radius: 4px;
             padding: 3px 10px;
             cursor: pointer;
             font-size: 12px;
         }
-        .btn-wl-toggle.off { background: #f0f0f0; color: #9e9e9e; }
+        .btn-wl-toggle.off { background: #fff; border-color: #d4d4d4; color: #9e9e9e; }
         .btn-wl-del {
             border: none;
             background: none;
@@ -130,28 +133,9 @@
             padding: 2px 8px;
             border-radius: 4px;
         }
-        .btn-wl-del:hover { background: #ffebee; }
+        .btn-wl-del:hover { background: #f0f0f0; }
 
-        .worklist-add { display: flex; gap: 8px; margin-top: 10px; }
-        .worklist-add input {
-            padding: 6px 8px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 13px;
-            flex: 1;
-            max-width: 160px;
-        }
-        .worklist-add button {
-            padding: 6px 14px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-        .worklist-add button:hover { background: #c8e6c9; }
-        .no-worklist { color: #757575; font-size: 13px; padding: 6px 8px; }
+        .no-worklist { color: #757575; font-size: 13px; }
 
         .frequency-panel {
             background: #fff;
@@ -243,66 +227,54 @@
     <div class="container">
         <div class="bar top-bar">
             <a class="back" href="/">← Devices</a>
-            <span class="device-title"><span id="device-name">—</span><span class="dev-serial" id="device-serial"></span></span>
+            <span class="device-title"><span id="device-name">—</span></span>
             <div class="mode-toggle">
                 <button id="btn-mode-scan" class="btn-mode">wideband_scan</button>
                 <button id="btn-mode-receive" class="btn-mode">multichannel</button>
             </div>
-            <button id="btn-save" class="btn-save">Save</button>
-        </div>
-
-        <div class="bar section">
-            <div class="section-title">Receiver</div>
-            <div class="row">
-                <label>Correction (ppm)
-                    <input id="hw-correction" type="number" step="1">
-                </label>
-                <span style="font-size:12px;color:#999">hardware properties; Save applies them</span>
-            </div>
         </div>
 
         <div class="bar section" id="band-section">
+            <div class="section-title">Band</div>
             <div class="row">
-                <label>Band
-                    <select id="band-select"></select>
-                </label>
-                <button class="btn-new" id="btn-band-new">+ New</button>
-                <span id="band-hint" style="font-size:12px;color:#999"></span>
+                <select id="band-select"></select>
+                <button class="btn" id="btn-band-add">Add</button>
+                <button class="btn" id="btn-band-edit" disabled>Edit</button>
             </div>
 
-            <div id="band-editor" style="display:none">
-                <div class="section-sub">Scan</div>
-                <div class="row">
-                    <label>From (MHz)
-                        <input id="b-freq-from" type="number" step="0.0001">
-                    </label>
-                    <label>To (MHz)
-                        <input id="b-freq-to" type="number" step="0.0001">
-                    </label>
-                    <label>Step (kHz)
-                        <input id="b-channel-step" type="number" step="0.625">
-                    </label>
-                    <label>Gain (dB)
-                        <input id="b-gain" type="number" step="0.1">
-                    </label>
-                    <label>SCAN prefix
-                        <input id="b-scan-fname" placeholder="SCAN-...">
-                    </label>
-                    <button class="btn-save" id="btn-band-save">Save band</button>
-                </div>
-
-                <div class="section-sub">Frequencies (work list)</div>
-                <div id="worklist-wrap"></div>
-                <div class="worklist-add">
-                    <input id="wl-freq" placeholder="172.8125">
-                    <input id="wl-label" placeholder="T">
-                    <button id="btn-wl-add">Add</button>
+            <div class="band-form" id="band-form" style="display:none">
+                <label>Name
+                    <input id="b-name" placeholder="172-173">
+                </label>
+                <label>From (MHz)
+                    <input id="b-freq-from" type="number" step="0.0001">
+                </label>
+                <label>To (MHz)
+                    <input id="b-freq-to" type="number" step="0.0001">
+                </label>
+                <label>Step (kHz)
+                    <input id="b-channel-step" type="number" step="0.625">
+                </label>
+                <label>Gain (dB)
+                    <input id="b-gain" type="number" step="0.1">
+                </label>
+                <label>SCAN prefix
+                    <input id="b-scan-fname" placeholder="SCAN-...">
+                </label>
+                <div class="form-actions">
+                    <button class="btn btn-primary" id="btn-band-save">Save</button>
+                    <button class="btn" id="btn-band-cancel">Cancel</button>
                 </div>
             </div>
 
             <div id="band-empty" class="band-empty" style="display:none">
                 No band selected — the device is not included in the generated config. Select a band or create one.
             </div>
+        </div>
+
+        <div class="bar section" id="worklist-section" style="display:none">
+            <div class="section-title">Frequencies (work list)</div>
+            <div id="worklist-wrap"></div>
         </div>
 
         <div id="panels"></div>
@@ -355,28 +327,9 @@
             const data = await api('/api/devices/' + encodeURIComponent(deviceName));
             device = data.data;
             document.getElementById('device-name').textContent = device.name;
-            document.getElementById('device-serial').textContent = `${device.type} · ${device.serial}`;
             document.title = device.name + ' — RTLSDR Airband WebPanel';
-            document.getElementById('hw-correction').value = device.correction ?? 0;
             await loadBands(device.preset);
             renderMode();
-        }
-
-        async function saveDevice() {
-            if (!device) return;
-            const body = {
-                mode: currentMode(),
-                preset: document.getElementById('band-select').value,
-                correction: parseFloat(document.getElementById('hw-correction').value || '0'),
-            };
-            try {
-                const data = await api('/api/devices/' + encodeURIComponent(deviceName), 'POST', body);
-                device = data.data;
-                showToast('Saved');
-                renderMode();
-            } catch (e) {
-                showToast(e.message, true);
-            }
         }
 
         async function setMode(mode) {
@@ -394,7 +347,7 @@
         function renderMode() {
             if (!device) return;
             const scan = currentMode() === 'wideband_scan';
-            document.getElementById('btn-mode-scan').className = 'btn-mode' + (scan ? ' active-scan' : '');
+            document.getElementById('btn-mode-scan').className = 'btn-mode' + (scan ? ' active' : '');
             document.getElementById('btn-mode-receive').className = 'btn-mode' + (!scan ? ' active' : '');
             // Панели записей — только scan + выбранная полоса
             const showPanels = scan && band !== null;
@@ -452,48 +405,50 @@
             renderMode();
         }
 
+        let bandFormMode = null;
+
         function setBand(b) {
             band = b;
-            const hasBand = b !== null;
-            document.getElementById('band-editor').style.display = hasBand ? '' : 'none';
-            document.getElementById('band-empty').style.display = hasBand ? 'none' : '';
-            document.getElementById('band-hint').textContent = hasBand
-                ? `${b.freq_from}–${b.freq_to} MHz`
-                : '';
-            if (hasBand) {
-                document.getElementById('b-freq-from').value = b.freq_from;
-                document.getElementById('b-freq-to').value = b.freq_to;
-                document.getElementById('b-channel-step').value = b.channel_step ?? 12.5;
-                document.getElementById('b-gain').value = b.gain ?? 15.7;
-                document.getElementById('b-scan-fname').value = b.scan_fname ?? '';
+            document.getElementById('band-empty').style.display = b ? 'none' : '';
+            document.getElementById('btn-band-edit').disabled = !b;
+            document.getElementById('worklist-section').style.display = b ? '' : 'none';
+            if (b) {
                 renderWorklist();
             }
+            renderMode();
         }
 
-        async function newBand() {
-            const name = prompt('New band name:', '172-173');
-            if (name === null) return;
-            const trimmed = name.trim();
-            if (trimmed === '') return;
-            try {
-                const data = await api('/api/presets', 'POST', {
-                    name: trimmed,
-                    freq_from: 172,
-                    freq_to: 173,
-                    channel_step: 12.5,
-                    gain: 15.7,
-                });
-                showToast('Band created: ' + data.data.name);
-                await loadBands(trimmed);
-                // зафиксировать новую полосу на устройстве
-                await selectBand(trimmed, true);
-            } catch (e) {
-                showToast(e.message, true);
+        function openBandForm(mode) {
+            if (mode === 'edit' && !band) return;
+            bandFormMode = mode;
+            const nameInput = document.getElementById('b-name');
+            if (mode === 'edit') {
+                nameInput.value = band.name;
+                nameInput.disabled = true;
+                document.getElementById('b-freq-from').value = band.freq_from;
+                document.getElementById('b-freq-to').value = band.freq_to;
+                document.getElementById('b-channel-step').value = band.channel_step ?? 12.5;
+                document.getElementById('b-gain').value = band.gain ?? 15.7;
+                document.getElementById('b-scan-fname').value = band.scan_fname ?? '';
+            } else {
+                nameInput.value = '';
+                nameInput.disabled = false;
+                document.getElementById('b-freq-from').value = 172;
+                document.getElementById('b-freq-to').value = 173;
+                document.getElementById('b-channel-step').value = 12.5;
+                document.getElementById('b-gain').value = 15.7;
+                document.getElementById('b-scan-fname').value = '';
             }
+            document.getElementById('band-form').style.display = 'grid';
         }
 
-        async function saveBand() {
-            if (!band) return;
+        function closeBandForm() {
+            bandFormMode = null;
+            document.getElementById('band-form').style.display = 'none';
+        }
+
+        async function saveBandForm() {
+            if (!bandFormMode) return;
             const body = {
                 freq_from: parseFloat(document.getElementById('b-freq-from').value),
                 freq_to: parseFloat(document.getElementById('b-freq-to').value),
@@ -503,9 +458,21 @@
             const fname = document.getElementById('b-scan-fname').value.trim();
             if (fname) body.scan_fname = fname;
             try {
-                const data = await api('/api/presets/' + encodeURIComponent(band.name), 'POST', body);
-                band = data.data;
-                showToast('Band saved');
+                if (bandFormMode === 'add') {
+                    body.name = document.getElementById('b-name').value.trim();
+                    const created = (await api('/api/presets', 'POST', body)).data;
+                    // зафиксировать новую полосу на устройстве
+                    device = (await api('/api/devices/' + encodeURIComponent(deviceName), 'POST', { preset: created.name })).data;
+                    showToast('Band created: ' + created.name);
+                    closeBandForm();
+                    await loadBands(created.name);
+                } else {
+                    band = (await api('/api/presets/' + encodeURIComponent(band.name), 'POST', body)).data;
+                    showToast('Band saved');
+                    closeBandForm();
+                    renderWorklist();
+                    renderMode();
+                }
             } catch (e) {
                 showToast(e.message, true);
             }
@@ -517,12 +484,11 @@
             const wrap = document.getElementById('worklist-wrap');
             const workList = (band && band.work_list) || {};
             const keys = Object.keys(workList).sort((a, b) => parseFloat(a) - parseFloat(b));
-            if (keys.length === 0) {
-                wrap.innerHTML = '<p class="no-worklist">No frequencies in work list</p>';
-                return;
-            }
             let html = `<table class="worklist"><thead><tr>
                 <th>Frequency (MHz)</th><th>Label</th><th>Active</th><th></th></tr></thead><tbody>`;
+            if (keys.length === 0) {
+                html += '<tr><td colspan="4" class="no-worklist">No frequencies in work list</td></tr>';
+            }
             for (const k of keys) {
                 const e = workList[k];
                 const label = isObject(e) ? e.label : String(e);
@@ -534,10 +500,16 @@
                     <td style="text-align:right"><button class="btn-wl-del" data-freq="${k}">×</button></td>
                 </tr>`;
             }
-            html += '</tbody></table>';
+            html += `</tbody><tfoot><tr>
+                <td><input id="wl-freq" placeholder="172.8125"></td>
+                <td><input id="wl-label" placeholder="T"></td>
+                <td><input type="checkbox" id="wl-enabled" checked></td>
+                <td style="text-align:right"><button class="btn btn-sm" id="btn-wl-add">Add</button></td>
+            </tr></tfoot></table>`;
             wrap.innerHTML = html;
             wrap.querySelectorAll('.btn-wl-toggle').forEach(btn => btn.onclick = () => toggleWorklist(btn.dataset.freq));
             wrap.querySelectorAll('.btn-wl-del').forEach(btn => btn.onclick = () => removeWorklist(btn.dataset.freq));
+            document.getElementById('btn-wl-add').onclick = addWorklist;
         }
 
         function isObject(v) { return v !== null && typeof v === 'object'; }
@@ -574,10 +546,12 @@
             const freq = document.getElementById('wl-freq').value.trim();
             if (!freq) { showToast('Enter a frequency', true); return; }
             const label = document.getElementById('wl-label').value.trim();
+            const enabled = document.getElementById('wl-enabled').checked;
             try {
-                await wlApi('/worklist', label ? { freq, label } : { freq });
+                await wlApi('/worklist', label ? { freq, label, enabled } : { freq, enabled });
                 document.getElementById('wl-freq').value = '';
                 document.getElementById('wl-label').value = '';
+                document.getElementById('wl-enabled').checked = true;
                 renderWorklist();
                 showToast('Added: ' + freq);
             } catch (e) {
@@ -600,6 +574,7 @@
             panels.innerHTML = '';
             totalFiles = 0;
             if (!device || currentMode() !== 'wideband_scan' || !band) {
+                updateRecords(0);
                 renderMode();
                 return;
             }
@@ -608,7 +583,7 @@
                 const freqData = await res.json();
                 const myReceiver = band.scan_fname;
                 const items = (freqData.data || []).filter(it => it.receiver === myReceiver);
-                if (items.length === 0) { renderMode(); return; }
+                if (items.length === 0) { updateRecords(0); renderMode(); return; }
                 for (const item of items) {
                     const panel = document.createElement('div');
                     panel.className = 'frequency-panel';
@@ -729,11 +704,11 @@
 
         document.getElementById('btn-mode-scan').onclick = () => setMode('wideband_scan');
         document.getElementById('btn-mode-receive').onclick = () => setMode('multichannel');
-        document.getElementById('btn-save').onclick = saveDevice;
         document.getElementById('band-select').onchange = (e) => selectBand(e.target.value, true);
-        document.getElementById('btn-band-new').onclick = newBand;
-        document.getElementById('btn-band-save').onclick = saveBand;
-        document.getElementById('btn-wl-add').onclick = addWorklist;
+        document.getElementById('btn-band-add').onclick = () => openBandForm('add');
+        document.getElementById('btn-band-edit').onclick = () => openBandForm('edit');
+        document.getElementById('btn-band-save').onclick = saveBandForm;
+        document.getElementById('btn-band-cancel').onclick = closeBandForm;
 
         loadDevice().then(() => loadPanels()).catch(e => showToast(e.message, true));
         fetchStatus();
