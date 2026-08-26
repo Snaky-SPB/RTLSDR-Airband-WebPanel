@@ -160,6 +160,10 @@ install_webpanel() {
     fi
     if [ -z "$dir" ]; then
         dir="$CLONE_DIR_WEBPANEL"
+    fi
+    # Как и у Airband: управляемый клон обновляется всегда (даже если WEBPANEL_DIR
+    # указывает на него), любой другой каталог — локальная копия, деплой как есть
+    if [ "$dir" = "$CLONE_DIR_WEBPANEL" ]; then
         if [ -d "$dir/.git" ] && ! git_tree_ok "$dir"; then
             log "  существующий клон $dir повреждён - удаляю"
             rm -rf "$dir"
@@ -168,11 +172,15 @@ install_webpanel() {
             log "  обновление: $dir -> $WEBPANEL_BRANCH"
             git -C "$dir" fetch origin
             git -C "$dir" checkout -B "$WEBPANEL_BRANCH" "origin/$WEBPANEL_BRANCH"
-        else
+        elif [ ! -e "$dir" ]; then
             log "  клонирование: $WEBPANEL_REPO ($WEBPANEL_BRANCH) -> $dir"
             mkdir -p "$(dirname "$dir")"
             git clone --quiet -b "$WEBPANEL_BRANCH" "$WEBPANEL_REPO" "$dir"
+        else
+            log "  NOTE: $dir существует без .git - оставляю как есть"
         fi
+    else
+        log "  локальная копия: $dir (git-операции не выполняются)"
     fi
     log "  исходники: $dir"
 
