@@ -140,6 +140,7 @@
         }
         .btn-group button:hover { background: #e0e0e0; }
         .btn-group .btn-whitelist { color: #43a047; }
+        .btn-group .btn-blacklist { color: #c62828; }
         .audio-wrapper { flex: 1; min-width: 120px; }
         .audio-wrapper audio { width: 100%; height: 38px; }
         .info-row {
@@ -218,6 +219,11 @@
             <div id="worklist-wrap"></div>
         </div>
 
+        <div class="bar section" id="blacklist-section" style="display:none">
+            <div class="section-title">Blacklist (scan)</div>
+            <div id="blacklist-wrap"></div>
+        </div>
+
         <div id="panels"></div>
         <p class="no-files" id="no-files" style="display:none">No scan recordings</p>
 
@@ -281,10 +287,11 @@
 
         function renderMode() {
             if (!device) return;
-            // Панели записей — только scan + выбранная полоса
+            // Панели записей и чёрный список — только scan + выбранная полоса
             const panelsEl = document.getElementById('panels');
             const showPanels = currentMode() === 'wideband_scan' && band !== null;
             panelsEl.style.display = showPanels ? '' : 'none';
+            document.getElementById('blacklist-section').style.display = showPanels ? '' : 'none';
             const visiblePanels = Array.from(panelsEl.children).filter(p => p.style.display !== 'none');
             document.getElementById('no-files').style.display =
                 (showPanels && visiblePanels.length === 0) ? '' : 'none';
@@ -344,6 +351,7 @@
             document.getElementById('worklist-section').style.display = b ? '' : 'none';
             if (b) {
                 renderWorklist();
+                renderBlacklist();
             }
             renderMode();
         }
@@ -437,6 +445,55 @@
             }
         }
 
+        // ---------- Чёрный список (scan-часть полосы) ----------
+
+        function renderBlacklist() {
+            const wrap = document.getElementById('blacklist-wrap');
+            const list = (band && band.freq_blacklist) || [];
+            let html = `<table class="worklist"><thead><tr>
+                <th>Frequency (MHz)</th><th></th></tr></thead><tbody>`;
+            if (list.length === 0) {
+                html += '<tr><td colspan="2" class="no-worklist">No blacklisted frequencies</td></tr>';
+            }
+            for (const k of list) {
+                html += `<tr>
+                    <td class="wl-freq">${k}</td>
+                    <td style="text-align:right"><button class="btn-wl-del" data-freq="${k}">×</button></td>
+                </tr>`;
+            }
+            html += `</tbody><tfoot><tr>
+                <td><input id="bl-freq" placeholder="172.8125"></td>
+                <td style="text-align:right"><button class="btn btn-sm" id="btn-bl-add">Add</button></td>
+            </tr></tfoot></table>`;
+            wrap.innerHTML = html;
+            wrap.querySelectorAll('.btn-wl-del').forEach(btn => btn.onclick = () => removeBlacklist(btn.dataset.freq));
+            document.getElementById('btn-bl-add').onclick = addBlacklist;
+        }
+
+        async function removeBlacklist(freq) {
+            if (!band) return;
+            try {
+                await wlApi('/blacklist/remove', { freq });
+                renderBlacklist();
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function addBlacklist() {
+            if (!band) return;
+            const freq = document.getElementById('bl-freq').value.trim();
+            if (!freq) { showToast('Enter a frequency', true); return; }
+            try {
+                await wlApi('/blacklist', { freq });
+                document.getElementById('bl-freq').value = '';
+                renderBlacklist();
+                showToast('Blacklisted: ' + freq);
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
         // ---------- Панели записей (scan) ----------
 
         function updateRecords(count) {
@@ -476,6 +533,7 @@
                             <div class="audio-wrapper"><audio controls></audio></div>
                             <div class="btn-group">
                                 <button class="btn-whitelist" title="Add to work list">&#8853;</button>
+                                <button class="btn-blacklist" title="Add to blacklist">&#9711;</button>
                             </div>
                         </div>
                         <div class="info-row">
@@ -521,6 +579,19 @@
                             band = fresh.data;
                             showToast('Added to work list');
                             renderWorklist();
+                        } catch (e) {
+                            showToast(e.message, true);
+                        }
+                    };
+                    panel.querySelector('.btn-blacklist').onclick = async () => {
+                        try {
+                            await api(`/api/presets/${encodeURIComponent(band.name)}/blacklist`, 'POST', {
+                                freq: mhzVal.toFixed(4)
+                            });
+                            const fresh = await api('/api/presets/' + encodeURIComponent(band.name));
+                            band = fresh.data;
+                            showToast('Blacklisted: ' + mhzVal.toFixed(4));
+                            renderBlacklist();
                         } catch (e) {
                             showToast(e.message, true);
                         }

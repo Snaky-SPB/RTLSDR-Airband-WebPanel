@@ -136,6 +136,11 @@ class ConfigGeneratorService
         $out[] = '  max_active_carriers = ' . self::MAX_ACTIVE_CARRIERS . ';';
         $out[] = '  modulation = "nfm";';
         $out[] = '  squelch_snr_threshold = ' . self::SQUELCH_SNR_THRESHOLD . ';';
+        $blacklist = $band['freq_blacklist'] ?? [];
+        if ($blacklist !== []) {
+            $freqs = implode(', ', array_map(fn($f) => $this->fmtFreq((float)$f), $blacklist));
+            $out[] = '  freq_blacklist = (' . $freqs . ');';
+        }
         $out[] = '    outputs: ({';
         $out[] = '      type = "file";';
         $out[] = '      directory = "' . ($device['mp3outdir'] ?? DeviceService::DEFAULT_SOURCES_DIR) . '";';

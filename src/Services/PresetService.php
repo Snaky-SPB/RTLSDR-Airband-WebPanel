@@ -8,11 +8,12 @@ use AirbandWebPanel\Exceptions\WriteException;
 
 /**
  * Полосы (band-пресеты) — операционный профиль:
- * scan-часть (диапазон, step, gain, SCAN-префикс) + receive-часть (work_list).
+ * scan-часть (диапазон, step, gain, SCAN-префикс, freq_blacklist)
+ * + receive-часть (work_list).
  * Одна полоса используется устройствами в любом режиме; режим выбирает часть.
  * Файл: presets/<name>.json. Суперсет старого scan-формата
  * {name, freq_from, freq_to, channel_step} — старые файлы читаются
- * с gain=15.7, work_list=[].
+ * с gain=15.7, work_list=[], freq_blacklist=[].
  */
 class PresetService
 {
@@ -177,6 +178,7 @@ class PresetService
             'channel_step' => is_numeric($step) ? (float)$step : self::DEFAULT_CHANNEL_STEP,
             'scan_fname' => $scanFname,
             'work_list' => is_array($preset['work_list'] ?? null) ? $preset['work_list'] : [],
+            'freq_blacklist' => $this->canonicalFreqBlacklist($preset['freq_blacklist'] ?? []),
         ];
     }
 
@@ -228,6 +230,7 @@ class PresetService
             'channel_step' => $channelStep,
             'scan_fname' => $scanFname,
             'work_list' => $this->normalizeWorkList($input['work_list'] ?? []),
+            'freq_blacklist' => $this->normalizeFreqBlacklist($input['freq_blacklist'] ?? []),
         ];
     }
 
@@ -260,6 +263,43 @@ class PresetService
             }
             $result[$freqKey] = ['label' => $label, 'enabled' => $enabled];
         }
+        return $result;
+    }
+
+    /**
+     * freq_blacklist: список частот (МГц), исключаемых из детекции wideband_scan.
+     * → дедупликация + сортировка, ключ "172.5000" (%.4f)
+     */
+    private function normalizeFreqBlacklist($blacklist): array
+    {
+        if (!is_array($blacklist)) {
+            throw new \InvalidArgumentException('freq_blacklist must be a list');
+        }
+        $map = [];
+        foreach ($blacklist as $freq) {
+            if (!is_scalar($freq) || !is_numeric($freq)) {
+                throw new \InvalidArgumentException('Invalid freq_blacklist frequency: ' . var_export($freq, true));
+            }
+            $map[sprintf('%.4f', (float)$freq)] = true;
+        }
+        $result = array_keys($map);
+        sort($result, SORT_NUMERIC);
+        return $result;
+    }
+
+    private function canonicalFreqBlacklist($blacklist): array
+    {
+        if (!is_array($blacklist)) {
+            return [];
+        }
+        $map = [];
+        foreach ($blacklist as $freq) {
+            if (is_scalar($freq) && is_numeric($freq)) {
+                $map[sprintf('%.4f', (float)$freq)] = true;
+            }
+        }
+        $result = array_keys($map);
+        sort($result, SORT_NUMERIC);
         return $result;
     }
 }

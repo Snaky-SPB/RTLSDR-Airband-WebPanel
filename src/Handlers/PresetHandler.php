@@ -44,7 +44,8 @@ class PresetHandler
 
     /**
      * POST /api/presets - создать полосу
-     * Body: { name, gain, freq_from, freq_to, channel_step, scan_fname (опц.), work_list (опц.) }
+     * Body: { name, gain, freq_from, freq_to, channel_step, scan_fname (опц.),
+     *         work_list (опц.), freq_blacklist (опц.) }
      */
     public function create(Request $request, Response $response): Response
     {
@@ -201,6 +202,66 @@ class PresetHandler
             return $this->respond($response, ['success' => false, 'error' => $e->getMessage()], 400);
         }
         return $this->respond($response, ['success' => true, 'data' => ['freq' => $freqKey, 'enabled' => !$enabled]]);
+    }
+
+    /**
+     * POST /api/presets/{name}/blacklist - добавить частоту в чёрный список полосы (scan)
+     * Body: { "freq": "172.5" }
+     */
+    public function addBlacklist(Request $request, Response $response, array $args): Response
+    {
+        $name = (string)($args['name'] ?? '');
+        $band = $this->presetService->find($name);
+        if ($band === null) {
+            return $this->respond($response, ['success' => false, 'error' => 'Preset not found'], 404);
+        }
+        $body = (array)($request->getParsedBody() ?? []);
+        $freq = trim((string)($body['freq'] ?? ''));
+        if ($freq === '' || !is_numeric($freq)) {
+            return $this->respond($response, ['success' => false, 'error' => 'Invalid frequency'], 400);
+        }
+        $freqKey = sprintf('%.4f', (float)$freq);
+        $blacklist = $band['freq_blacklist'];
+        if (!in_array($freqKey, $blacklist, true)) {
+            $blacklist[] = $freqKey;
+            sort($blacklist, SORT_NUMERIC);
+            try {
+                $this->presetService->update($name, ['freq_blacklist' => $blacklist]);
+            } catch (WriteException $e) {
+                return $this->respond($response, ['success' => false, 'error' => $e->getMessage()], 500);
+            } catch (\InvalidArgumentException $e) {
+                return $this->respond($response, ['success' => false, 'error' => $e->getMessage()], 400);
+            }
+        }
+        return $this->respond($response, ['success' => true, 'data' => ['freq' => $freqKey]]);
+    }
+
+    /**
+     * POST /api/presets/{name}/blacklist/remove
+     * Body: { "freq": "172.5" }
+     */
+    public function removeBlacklist(Request $request, Response $response, array $args): Response
+    {
+        $name = (string)($args['name'] ?? '');
+        $band = $this->presetService->find($name);
+        if ($band === null) {
+            return $this->respond($response, ['success' => false, 'error' => 'Preset not found'], 404);
+        }
+        $body = (array)($request->getParsedBody() ?? []);
+        $freq = trim((string)($body['freq'] ?? ''));
+        $freqKey = $freq !== '' ? sprintf('%.4f', (float)$freq) : '';
+        $blacklist = $band['freq_blacklist'];
+        $newBlacklist = array_values(array_filter($blacklist, static fn($f) => $f !== $freqKey));
+        if ($newBlacklist !== $blacklist) {
+            try {
+                $this->presetService->update($name, ['freq_blacklist' => $newBlacklist]);
+            } catch (WriteException $e) {
+                return $this->respond($response, ['success' => false, 'error' => $e->getMessage()], 500);
+            } catch (\InvalidArgumentException $e) {
+                return $this->respond($response, ['success' => false, 'error' => $e->getMessage()], 400);
+            }
+        }
+        return $this->respond($response, ['success' => true]);
     }
 
     private function respond(Response $response, array $data, int $status = 200): Response

@@ -82,6 +82,8 @@ $app->delete('/api/presets/{name}', [$presetHandler, 'delete']);
 $app->post('/api/presets/{name}/worklist', [$presetHandler, 'addWorklist']);
 $app->post('/api/presets/{name}/worklist/remove', [$presetHandler, 'removeWorklist']);
 $app->post('/api/presets/{name}/worklist/toggle', [$presetHandler, 'toggleWorklist']);
+$app->post('/api/presets/{name}/blacklist', [$presetHandler, 'addBlacklist']);
+$app->post('/api/presets/{name}/blacklist/remove', [$presetHandler, 'removeBlacklist']);
 
 // API: Список частот
 $app->get('/api/frequencies', [$frequencyHandler, 'list']);
