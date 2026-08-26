@@ -373,12 +373,17 @@
             html += `</tbody><tfoot><tr>
                 <td><input id="wl-freq" placeholder="172.8125"></td>
                 <td><input id="wl-label" placeholder="T"></td>
-                <td><input type="checkbox" id="wl-enabled" checked></td>
+                <td><button class="btn-wl-toggle" id="wl-enabled">on</button></td>
                 <td style="text-align:right"><button class="btn btn-sm" id="btn-wl-add">Add</button></td>
             </tr></tfoot></table>`;
             wrap.innerHTML = html;
-            wrap.querySelectorAll('.btn-wl-toggle').forEach(btn => btn.onclick = () => toggleWorklist(btn.dataset.freq));
+            wrap.querySelectorAll('tbody .btn-wl-toggle').forEach(btn => btn.onclick = () => toggleWorklist(btn.dataset.freq));
             wrap.querySelectorAll('.btn-wl-del').forEach(btn => btn.onclick = () => removeWorklist(btn.dataset.freq));
+            const wlEnabled = document.getElementById('wl-enabled');
+            wlEnabled.onclick = () => {
+                wlEnabled.classList.toggle('off');
+                wlEnabled.textContent = wlEnabled.classList.contains('off') ? 'off' : 'on';
+            };
             document.getElementById('btn-wl-add').onclick = addWorklist;
         document.getElementById('btn-delete-all').onclick = deleteAll;
         }
@@ -417,12 +422,14 @@
             const freq = document.getElementById('wl-freq').value.trim();
             if (!freq) { showToast('Enter a frequency', true); return; }
             const label = document.getElementById('wl-label').value.trim();
-            const enabled = document.getElementById('wl-enabled').checked;
+            const enabled = !document.getElementById('wl-enabled').classList.contains('off');
             try {
                 await wlApi('/worklist', label ? { freq, label, enabled } : { freq, enabled });
                 document.getElementById('wl-freq').value = '';
                 document.getElementById('wl-label').value = '';
-                document.getElementById('wl-enabled').checked = true;
+                const eb = document.getElementById('wl-enabled');
+                eb.classList.remove('off');
+                eb.textContent = 'on';
                 renderWorklist();
                 showToast('Added: ' + freq);
             } catch (e) {
