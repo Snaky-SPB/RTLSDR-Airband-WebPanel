@@ -239,6 +239,7 @@
                 <div class="form-actions">
                     <button class="btn btn-primary" id="btn-band-save">Save</button>
                     <button class="btn" id="btn-band-cancel">Cancel</button>
+                    <button class="btn btn-danger" id="btn-band-delete" style="display:none">Delete</button>
                 </div>
             </div>
         </div>
@@ -362,12 +363,10 @@
                     <td>${users.length ? users.join(', ') : '<span class="muted">—</span>'}</td>
                     <td class="actions">
                         <button class="btn btn-sm btn-band-edit" data-name="${b.name}">Edit</button>
-                        <button class="btn btn-sm btn-danger btn-band-del" data-name="${b.name}">Delete</button>
                     </td>`;
                 tbody.appendChild(tr);
             }
             tbody.querySelectorAll('.btn-band-edit').forEach(btn => btn.onclick = () => openBandForm(btn.dataset.name));
-            tbody.querySelectorAll('.btn-band-del').forEach(btn => btn.onclick = () => deleteBand(btn.dataset.name));
         }
 
         function openBandForm(name) {
@@ -380,6 +379,7 @@
             document.getElementById('bf-channel-step').value = b ? b.channel_step : 12.5;
             document.getElementById('bf-gain').value = b ? b.gain : 15.7;
             document.getElementById('bf-scan-fname').value = b ? (b.scan_fname ?? '') : '';
+            document.getElementById('btn-band-delete').style.display = name ? '' : 'none';
             document.getElementById('band-form').style.display = 'grid';
         }
 
@@ -419,6 +419,7 @@
             try {
                 await api('/api/presets/' + encodeURIComponent(name), 'DELETE');
                 showToast('Band deleted');
+                closeBandForm();
                 loadDevices();
             } catch (e) {
                 showToast(e.message, true);
@@ -517,6 +518,7 @@
         document.getElementById('btn-band-add').onclick = () => openBandForm(null);
         document.getElementById('btn-band-save').onclick = saveBand;
         document.getElementById('btn-band-cancel').onclick = closeBandForm;
+        document.getElementById('btn-band-delete').onclick = () => deleteBand(bandEditing);
         document.getElementById('btn-enable').onclick = () => serviceAction('/api/system/service/enable', 'Enable');
         document.getElementById('btn-disable').onclick = () => serviceAction('/api/system/service/disable', 'Disable');
         document.getElementById('btn-start').onclick = () => serviceAction('/api/system/scanner/start', 'Start');
