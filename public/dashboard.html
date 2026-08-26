@@ -89,16 +89,16 @@
 
         .muted { color: #9e9e9e; }
 
-        .device-form { width: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin-top: 10px; }
-        .device-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #757575; }
-        .device-form input, .device-form select {
+        .item-form { width: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin-top: 10px; }
+        .item-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #757575; }
+        .item-form input, .item-form select {
             padding: 6px 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 13px;
             color: #333;
         }
-        .device-form .form-actions { display: flex; flex-direction: row; align-items: flex-end; gap: 8px; }
+        .item-form .form-actions { display: flex; flex-direction: row; align-items: flex-end; gap: 8px; }
 
         .bottom-bar { margin-top: 10px; margin-bottom: 0; font-size: 13px; color: #555; }
         .sep { color: #ddd; margin: 0 4px; }
@@ -167,7 +167,7 @@
                     <tr id="no-devices-row"><td colspan="4" class="muted">No devices yet — add one.</td></tr>
                 </tbody>
             </table>
-            <div class="device-form" id="device-form" style="display:none">
+            <div class="item-form" id="device-form" style="display:none">
                 <label>Name
                     <input id="df-name" placeholder="Piter 172-173">
                 </label>
@@ -193,6 +193,52 @@
                     <button class="btn btn-primary" id="btn-device-save">Save</button>
                     <button class="btn" id="btn-device-cancel">Cancel</button>
                     <button class="btn btn-danger" id="btn-device-delete" style="display:none">Delete</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bar" style="flex-direction: column; align-items: stretch;">
+            <div class="devices-header">
+                <span class="title">Bands</span>
+                <button id="btn-band-add" class="btn">Add</button>
+            </div>
+            <table class="devices">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Range</th>
+                        <th>Step</th>
+                        <th>Gain</th>
+                        <th>Used by</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="bands-tbody">
+                    <tr><td colspan="6" class="muted">No bands yet — add one.</td></tr>
+                </tbody>
+            </table>
+            <div class="item-form" id="band-form" style="display:none">
+                <label>Name
+                    <input id="bf-name" placeholder="172-173">
+                </label>
+                <label>From (MHz)
+                    <input id="bf-freq-from" type="number" step="0.0001">
+                </label>
+                <label>To (MHz)
+                    <input id="bf-freq-to" type="number" step="0.0001">
+                </label>
+                <label>Step (kHz)
+                    <input id="bf-channel-step" type="number" step="0.625">
+                </label>
+                <label>Gain (dB)
+                    <input id="bf-gain" type="number" step="0.1">
+                </label>
+                <label>SCAN prefix
+                    <input id="bf-scan-fname" placeholder="SCAN-...">
+                </label>
+                <div class="form-actions">
+                    <button class="btn btn-primary" id="btn-band-save">Save</button>
+                    <button class="btn" id="btn-band-cancel">Cancel</button>
                 </div>
             </div>
         </div>
@@ -250,10 +296,11 @@
         let lastTableKey = null;
 
         function refreshDevicesTable() {
-            const key = JSON.stringify([devices, liveModes]);
+            const key = JSON.stringify([devices, liveModes, bands]);
             if (key === lastTableKey) return;
             lastTableKey = key;
             renderDevices();
+            renderBands();
         }
 
         async function loadDevices() {
@@ -293,6 +340,89 @@
                 tbody.appendChild(tr);
             }
             tbody.querySelectorAll('.btn-edit').forEach(btn => btn.onclick = () => openForm(btn.dataset.name));
+        }
+
+        let bandEditing = null;
+
+        function renderBands() {
+            const tbody = document.getElementById('bands-tbody');
+            tbody.innerHTML = '';
+            if (bands.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="muted">No bands yet — add one.</td></tr>';
+                return;
+            }
+            for (const b of bands) {
+                const users = devices.filter(d => d.preset === b.name).map(d => d.name);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="dev-name">${b.name}</td>
+                    <td>${b.freq_from}–${b.freq_to}</td>
+                    <td>${b.channel_step}</td>
+                    <td>${b.gain}</td>
+                    <td>${users.length ? users.join(', ') : '<span class="muted">—</span>'}</td>
+                    <td class="actions">
+                        <button class="btn btn-sm btn-band-edit" data-name="${b.name}">Edit</button>
+                        <button class="btn btn-sm btn-danger btn-band-del" data-name="${b.name}">Delete</button>
+                    </td>`;
+                tbody.appendChild(tr);
+            }
+            tbody.querySelectorAll('.btn-band-edit').forEach(btn => btn.onclick = () => openBandForm(btn.dataset.name));
+            tbody.querySelectorAll('.btn-band-del').forEach(btn => btn.onclick = () => deleteBand(btn.dataset.name));
+        }
+
+        function openBandForm(name) {
+            bandEditing = name || 'add';
+            const b = name ? bands.find(x => x.name === name) : null;
+            document.getElementById('bf-name').value = b ? b.name : '';
+            document.getElementById('bf-name').disabled = !!b;
+            document.getElementById('bf-freq-from').value = b ? b.freq_from : 172;
+            document.getElementById('bf-freq-to').value = b ? b.freq_to : 173;
+            document.getElementById('bf-channel-step').value = b ? b.channel_step : 12.5;
+            document.getElementById('bf-gain').value = b ? b.gain : 15.7;
+            document.getElementById('bf-scan-fname').value = b ? (b.scan_fname ?? '') : '';
+            document.getElementById('band-form').style.display = 'grid';
+        }
+
+        function closeBandForm() {
+            bandEditing = null;
+            document.getElementById('band-form').style.display = 'none';
+        }
+
+        async function saveBand() {
+            if (!bandEditing) return;
+            const body = {
+                freq_from: parseFloat(document.getElementById('bf-freq-from').value),
+                freq_to: parseFloat(document.getElementById('bf-freq-to').value),
+                channel_step: parseFloat(document.getElementById('bf-channel-step').value || '12.5'),
+                gain: parseFloat(document.getElementById('bf-gain').value || '15.7'),
+            };
+            const fname = document.getElementById('bf-scan-fname').value.trim();
+            if (fname) body.scan_fname = fname;
+            try {
+                if (bandEditing === 'add') {
+                    body.name = document.getElementById('bf-name').value.trim();
+                    const data = await api('/api/presets', 'POST', body);
+                    showToast('Band created: ' + data.data.name);
+                } else {
+                    await api('/api/presets/' + encodeURIComponent(bandEditing), 'POST', body);
+                    showToast('Band saved');
+                }
+                closeBandForm();
+                loadDevices();
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function deleteBand(name) {
+            if (!confirm(`Delete band "${name}"?`)) return;
+            try {
+                await api('/api/presets/' + encodeURIComponent(name), 'DELETE');
+                showToast('Band deleted');
+                loadDevices();
+            } catch (e) {
+                showToast(e.message, true);
+            }
         }
 
         function fillPresetSelect(selected) {
@@ -384,6 +514,9 @@
         document.getElementById('btn-device-save').onclick = saveDevice;
         document.getElementById('btn-device-cancel').onclick = closeForm;
         document.getElementById('btn-device-delete').onclick = () => removeDevice(editingName);
+        document.getElementById('btn-band-add').onclick = () => openBandForm(null);
+        document.getElementById('btn-band-save').onclick = saveBand;
+        document.getElementById('btn-band-cancel').onclick = closeBandForm;
         document.getElementById('btn-enable').onclick = () => serviceAction('/api/system/service/enable', 'Enable');
         document.getElementById('btn-disable').onclick = () => serviceAction('/api/system/service/disable', 'Disable');
         document.getElementById('btn-start').onclick = () => serviceAction('/api/system/scanner/start', 'Start');
