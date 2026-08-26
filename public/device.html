@@ -29,7 +29,7 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
 
-        .top-bar { margin-bottom: 10px; }
+        .top-bar { margin-bottom: 10px; justify-content: flex-start; }
         .back {
             color: #333;
             text-decoration: none;
@@ -39,19 +39,15 @@
         .back:hover { text-decoration: underline; }
         .device-title { font-size: 14px; font-weight: 600; }
 
-        .mode-toggle { display: flex; gap: 6px; }
-        .btn-mode {
-            padding: 6px 14px;
-            border: 1px solid #d4d4d4;
+        .mode-badge {
+            display: inline-block;
+            padding: 2px 8px;
             border-radius: 4px;
-            cursor: pointer;
-            font-size: 13px;
-            background: #fff;
-            color: #333;
-            transition: background 0.15s;
+            font-size: 12px;
+            background: #f0f0f0;
+            color: #555;
         }
-        .btn-mode:hover { background: #f0f0f0; }
-        .btn-mode.active { background: #333; border-color: #333; color: #fff; }
+        .band-label { font-size: 13px; }
 
         .btn {
             padding: 6px 14px;
@@ -68,11 +64,9 @@
         .btn-sm { padding: 4px 10px; }
 
         .section { flex-direction: column; align-items: stretch; }
-        .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .band-label { font-size: 13px; }
 
         .section-title { font-size: 13px; font-weight: 600; color: #555; margin: 4px 0 8px; }
-        .band-empty { color: #757575; font-size: 13px; padding: 6px 0; }
+        .band-empty { color: #757575; font-size: 13px; margin: 0 8px 10px; }
 
         table.worklist { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
         table.worklist th {
@@ -209,20 +203,12 @@
         <div class="bar top-bar">
             <a class="back" href="/">← Devices</a>
             <span class="device-title"><span id="device-name">—</span></span>
-            <div class="mode-toggle">
-                <button id="btn-mode-scan" class="btn-mode">wideband_scan</button>
-                <button id="btn-mode-receive" class="btn-mode">multichannel</button>
-            </div>
+            <span id="device-mode" class="mode-badge">—</span>
+            <span id="band-label" class="band-label">—</span>
         </div>
 
-        <div class="bar section" id="band-section">
-            <div class="section-title">Band</div>
-            <div class="row">
-                <span id="band-label" class="band-label">—</span>
-            </div>
-            <div id="band-empty" class="band-empty" style="display:none">
-                No band selected — the device is not included in the generated config. Set a band on the main screen.
-            </div>
+        <div id="band-empty" class="band-empty" style="display:none">
+            No band selected — the device is not included in the generated config. Set a band on the main screen.
         </div>
 
         <div class="bar section" id="worklist-section" style="display:none">
@@ -280,31 +266,16 @@
             const data = await api('/api/devices/' + encodeURIComponent(deviceName));
             device = data.data;
             document.getElementById('device-name').textContent = device.name;
+            document.getElementById('device-mode').textContent = device.mode;
             document.title = device.name + ' — RTLSDR Airband WebPanel';
             await loadBands(device.preset);
             renderMode();
         }
 
-        async function setMode(mode) {
-            if (!device || device.mode === mode) return;
-            try {
-                const data = await api('/api/devices/' + encodeURIComponent(deviceName), 'POST', { mode });
-                device = data.data;
-                renderMode();
-                showToast('Mode: ' + mode);
-                loadPanels();
-            } catch (e) {
-                showToast(e.message, true);
-            }
-        }
-
         function renderMode() {
             if (!device) return;
-            const scan = currentMode() === 'wideband_scan';
-            document.getElementById('btn-mode-scan').className = 'btn-mode' + (scan ? ' active' : '');
-            document.getElementById('btn-mode-receive').className = 'btn-mode' + (!scan ? ' active' : '');
             // Панели записей — только scan + выбранная полоса
-            const showPanels = scan && band !== null;
+            const showPanels = currentMode() === 'wideband_scan' && band !== null;
             document.getElementById('panels').style.display = showPanels ? '' : 'none';
             document.getElementById('no-files').style.display =
                 (showPanels && !document.getElementById('panels').children.length) ? '' : 'none';
@@ -576,8 +547,7 @@
 
         // ---------- События ----------
 
-        document.getElementById('btn-mode-scan').onclick = () => setMode('wideband_scan');
-        document.getElementById('btn-mode-receive').onclick = () => setMode('multichannel');
+
 
 
         loadDevice().then(() => loadPanels()).catch(e => showToast(e.message, true));
