@@ -92,6 +92,9 @@ $app->get('/api/frequencies/{frequency}/{receiver}', [$frequencyHandler, 'getFil
 // API: Удалить файлы частоты
 $app->post('/api/frequencies/{frequency}/{receiver}/delete', [$frequencyHandler, 'delete']);
 
+// API: Удалить все файлы полосы (приёмника)
+$app->post('/api/frequencies/delete/receiver/{receiver}', [$frequencyHandler, 'deleteReceiver']);
+
 // API: Метаданные файла
 $app->get('/api/files/{filename}/meta', [$frequencyHandler, 'getFileMeta']);
 

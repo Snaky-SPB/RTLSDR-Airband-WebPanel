@@ -98,6 +98,35 @@ class FrequencyHandler
     }
 
     /**
+     * POST /api/frequencies/delete/receiver/{receiver} - удалить все файлы полосы
+     */
+    public function deleteReceiver(Request $request, Response $response, array $args): Response
+    {
+        $receiver = (string)($args['receiver'] ?? '');
+
+        if ($receiver === '' || !preg_match('/^SCAN-[A-Za-z0-9_-]+$/', $receiver)) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Invalid receiver',
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+
+        $deleted = $this->scannerService->deleteReceiverFiles($receiver);
+
+        $data = [
+            'success' => true,
+            'data' => [
+                'deleted' => $deleted,
+                'receiver' => $receiver,
+            ],
+        ];
+
+        $response->getBody()->write(json_encode($data, JSON_PRETTY_PRINT));
+        return $response->withHeader('Content-Type', 'application/json');
+    }
+
+    /**
      * GET /api/files/{filename}/meta - метаданные файла
      */
     public function getFileMeta(Request $request, Response $response, array $args): Response

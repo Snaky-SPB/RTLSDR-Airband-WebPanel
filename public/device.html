@@ -62,6 +62,7 @@
         .btn:hover { background: #f0f0f0; }
         .btn:disabled { opacity: 0.45; cursor: default; }
         .btn-sm { padding: 4px 10px; }
+        .btn-danger { color: #c62828; }
 
         .section { flex-direction: column; align-items: stretch; }
 
@@ -138,7 +139,6 @@
         }
         .btn-group button:hover { background: #e0e0e0; }
         .btn-group .btn-whitelist { color: #43a047; }
-        .btn-group .btn-delete { color: #c62828; }
         .audio-wrapper { flex: 1; min-width: 120px; }
         .audio-wrapper audio { width: 100%; height: 38px; }
         .info-row {
@@ -219,6 +219,11 @@
         <div id="panels"></div>
         <p class="no-files" id="no-files" style="display:none">No scan recordings</p>
 
+        <div class="bar" id="delete-all-bar" style="display:none">
+            <span id="delete-all-count">0 files</span>
+            <button class="btn btn-danger" id="btn-delete-all">Delete all</button>
+        </div>
+
         <div class="bar bottom-bar">
             <span class="scanner-status"><span class="status-dot" id="status-dot"></span><span id="status-text">Scanner</span></span>
             <span class="sep">|</span>
@@ -275,10 +280,28 @@
         function renderMode() {
             if (!device) return;
             // Панели записей — только scan + выбранная полоса
+            const panelsEl = document.getElementById('panels');
             const showPanels = currentMode() === 'wideband_scan' && band !== null;
-            document.getElementById('panels').style.display = showPanels ? '' : 'none';
+            panelsEl.style.display = showPanels ? '' : 'none';
+            const visiblePanels = Array.from(panelsEl.children).filter(p => p.style.display !== 'none');
             document.getElementById('no-files').style.display =
-                (showPanels && !document.getElementById('panels').children.length) ? '' : 'none';
+                (showPanels && visiblePanels.length === 0) ? '' : 'none';
+            const word = totalFiles === 1 ? 'file' : 'files';
+            document.getElementById('delete-all-count').textContent = totalFiles + ' ' + word;
+            document.getElementById('delete-all-bar').style.display =
+                (showPanels && visiblePanels.length > 0) ? '' : 'none';
+        }
+
+        async function deleteAll() {
+            if (!band) return;
+            if (!confirm('Delete all scan files for band "' + band.name + '"?')) return;
+            try {
+                const data = await api('/api/frequencies/delete/receiver/' + encodeURIComponent(band.scan_fname), 'POST', {});
+                showToast('Deleted: ' + data.data.deleted);
+                await loadPanels();
+            } catch (e) {
+                showToast(e.message, true);
+            }
         }
 
         // ---------- Полосы ----------
@@ -355,6 +378,7 @@
             wrap.querySelectorAll('.btn-wl-toggle').forEach(btn => btn.onclick = () => toggleWorklist(btn.dataset.freq));
             wrap.querySelectorAll('.btn-wl-del').forEach(btn => btn.onclick = () => removeWorklist(btn.dataset.freq));
             document.getElementById('btn-wl-add').onclick = addWorklist;
+        document.getElementById('btn-delete-all').onclick = deleteAll;
         }
 
         function isObject(v) { return v !== null && typeof v === 'object'; }
@@ -442,7 +466,6 @@
                             </div>
                             <div class="audio-wrapper"><audio controls></audio></div>
                             <div class="btn-group">
-                                <button class="btn-delete" title="Delete files">&#128465;</button>
                                 <button class="btn-whitelist" title="Add to work list">&#8853;</button>
                             </div>
                         </div>
@@ -464,32 +487,6 @@
                         infoRight.textContent = file.filename;
                     }
 
-                    async function deleteAndRefresh() {
-                        if (files.length === 0) return;
-                        const wasPlaying = !audio.paused;
-                        const oldCount = files.length;
-                        await fetch(`/api/frequencies/${item.frequency}/${encodeURIComponent(item.receiver)}/delete`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: '{}'
-                        });
-                        const res = await fetch(`/api/frequencies/${item.frequency}/${encodeURIComponent(item.receiver)}`);
-                        const data = await res.json();
-                        files = data.data.files || [];
-                        totalFiles -= (oldCount - files.length);
-                        updateRecords(totalFiles);
-                        currentIdx = 0;
-                        if (files.length > 0) {
-                            setFile(files[0], wasPlaying);
-                        } else {
-                            audio.removeAttribute('src');
-                            audio.load();
-                            infoRight.textContent = '';
-                            panel.style.display = 'none';
-                            renderMode();
-                        }
-                    }
-
                     async function loadFiles() {
                         const res = await fetch(`/api/frequencies/${item.frequency}/${encodeURIComponent(item.receiver)}`);
                         const data = await res.json();
@@ -503,7 +500,6 @@
                     audio.onended = () => { if (currentIdx < files.length - 1) setFile(files[++currentIdx], true); };
                     panel.querySelector('.btn-prev').onclick = () => { if (currentIdx > 0) setFile(files[--currentIdx], false); };
                     panel.querySelector('.btn-next').onclick = () => { if (currentIdx < files.length - 1) setFile(files[++currentIdx], false); };
-                    panel.querySelector('.btn-delete').onclick = deleteAndRefresh;
                     panel.querySelector('.btn-whitelist').onclick = async () => {
                         if (files.length === 0) return;
                         const label = prompt('Label for ' + mhzVal.toFixed(4) + ' MHz:', 'marked');
@@ -516,7 +512,6 @@
                             band = fresh.data;
                             showToast('Added to work list');
                             renderWorklist();
-                            await deleteAndRefresh();
                         } catch (e) {
                             showToast(e.message, true);
                         }

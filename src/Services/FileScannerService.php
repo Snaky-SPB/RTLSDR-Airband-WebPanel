@@ -113,6 +113,28 @@ class FileScannerService
     }
 
     /**
+     * Удалить все файлы приёмника (полосы)
+     */
+    public function deleteReceiverFiles(string $receiver): int
+    {
+        $files = $this->getScanFiles();
+        $deleted = 0;
+
+        foreach ($files as $file) {
+            $info = $this->parseFilename($file);
+            if ($info === null || $info['receiver'] !== $receiver) {
+                continue;
+            }
+            $path = $this->sourcesDir . '/' . $file;
+            if (file_exists($path) && unlink($path)) {
+                $deleted++;
+            }
+        }
+
+        return $deleted;
+    }
+
+    /**
      * Получить метаданные файла
      */
     public function getFileMetadata(string $filename): ?array
