@@ -43,9 +43,9 @@ class ConfigGeneratorService
             'multiple_output_threads = true;',
             'stats_filepath = "/media/rx/rtl_airband_stats.txt";',
             'log_scan_activity = true;',
-            'min_transmission_time = 10.0;',
-            'max_transmission_time = 3600.0;',
-            'max_transmission_idle = 60.0;',
+            'split_min_file_time = 2.0;',
+            'split_max_file_time = 3600.0;',
+            'split_max_idle_time = 60.0;',
             'devices:',
             '(',
         ];
