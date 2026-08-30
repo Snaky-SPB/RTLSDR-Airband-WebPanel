@@ -382,9 +382,17 @@ check_ok() {
 
 # --- восстановление ---
 
+# USB-устройство интерфейса: X-Y (не X-Y:Z.W) — remove-атрибут есть только на устройстве
 usb_device_of_iface() {
+    local p b
     [ -e "/sys/class/net/$IFACE/device" ] || return 1
-    basename "$(readlink -f "/sys/class/net/$IFACE/device")"
+    p="$(readlink -f "/sys/class/net/$IFACE/device")"
+    b="$(basename "$p")"
+    if [ "${b%%:*}" != "$b" ]; then
+        basename "$(dirname "$p")"
+    else
+        printf '%s' "$b"
+    fi
 }
 
 vbus_regulator_dir() {
