@@ -340,6 +340,8 @@ CHECK_INTERVAL="${CHECK_INTERVAL:-60}"
 FAIL_THRESHOLD="${FAIL_THRESHOLD:-5}"
 PROBE_TIMEOUT="${PROBE_TIMEOUT:-4}"
 PROBE_HOSTS="${PROBE_HOSTS:-8.8.8.8:9 1.1.1.1:9 9.9.9.9:9}"
+PROBE_URLS="${PROBE_URLS:-https://api.ipify.org/?format=json https://ifconfig.co/ip}"
+PROBE_HTTP_TIMEOUT="${PROBE_HTTP_TIMEOUT:-8}"
 RESET_WAIT="${RESET_WAIT:-120}"
 COOLDOWN="${COOLDOWN:-1800}"
 VBUS_REG="${VBUS_REG:-}"
@@ -361,10 +363,22 @@ gw_ok() {
     ping -c 1 -W 2 "$GW" >/dev/null 2>&1
 }
 
-# «Интернет за модемом»: TCP-подключение к целям PROBE_HOSTS (host:port, через пробел).
-# Цель жива, если соединение завершилось: закрытый порт даёт RST (rc=1),
-# открытый (например host:443) - устанавливается (rc=0); мёртвая сеть -> timeout (rc=124).
-external_ok() {
+# «Интернет за модемом» — прямой трафик через IFACE (в обход VPN и прочей маршрутизации):
+#  1) HTTPS-запрос через curl к любому из PROBE_URLS (реальный ответ = канал жив);
+#  2) иначе TCP-пробы PROBE_HOSTS (host:port): закрытый порт -> RST (rc=1),
+#     открытый (host:443) -> connect (rc=0); timeout (rc=124) = мёртво.
+http_ok() {
+    local u
+    command -v curl >/dev/null 2>&1 || return 1
+    for u in $PROBE_URLS; do
+        if curl -fsS --interface "$IFACE" --max-time "$PROBE_HTTP_TIMEOUT" "$u" >/dev/null 2>&1; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+tcp_ok() {
     local t rc
     for t in $PROBE_HOSTS; do
         timeout "$PROBE_TIMEOUT" bash -c "exec 3<>/dev/tcp/${t%:*}/${t#*:}" 2>/dev/null
@@ -374,6 +388,10 @@ external_ok() {
         fi
     done
     return 1
+}
+
+external_ok() {
+    http_ok || tcp_ok
 }
 
 check_ok() {
@@ -509,11 +527,14 @@ CHECK_INTERVAL=60
 FAIL_THRESHOLD=5
 # Таймаут одного TCP-проба, сек
 PROBE_TIMEOUT=4
-# Цели TCP-проб host:port (через пробел). Закрытый порт даёт RST,
-# открытый (host:443) - устанавливает соединение; оба = жива.
-# Если egress режет TCP:9 - используйте открытый порт или
-# внутренний шлюз VPN-туннеля (host:9).
+# Цели TCP-проб host:port (через пробел, фолбэк, если HTTPS-проба не прошла).
+# Закрытый порт даёт RST, открытый (host:443) - connect; оба = жива.
+# Пусто - только HTTPS-пробы.
 PROBE_HOSTS=8.8.8.8:9 1.1.1.1:9 9.9.9.9:9
+# HTTPS-цели прямой пробы через IFACE (через пробел); любая успешная = жива.
+PROBE_URLS=https://api.ipify.org/?format=json https://ifconfig.co/ip
+# Таймаут одного HTTPS-запроса, сек
+PROBE_HTTP_TIMEOUT=8
 # Пауза после ступени восстановления перед повторной проверкой, сек
 RESET_WAIT=120
 # Кулдаун между вмешательствами, сек (переживает reboot - файл состояния в /var/lib)
