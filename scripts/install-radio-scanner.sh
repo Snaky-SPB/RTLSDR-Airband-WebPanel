@@ -339,6 +339,7 @@ GW="${GW:-192.168.88.1}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-60}"
 FAIL_THRESHOLD="${FAIL_THRESHOLD:-5}"
 PROBE_TIMEOUT="${PROBE_TIMEOUT:-4}"
+PROBE_HOSTS="${PROBE_HOSTS:-8.8.8.8:9 1.1.1.1:9 9.9.9.9:9}"
 RESET_WAIT="${RESET_WAIT:-120}"
 COOLDOWN="${COOLDOWN:-1800}"
 VBUS_REG="${VBUS_REG:-}"
@@ -360,14 +361,17 @@ gw_ok() {
     ping -c 1 -W 2 "$GW" >/dev/null 2>&1
 }
 
-# «Интернет за модемом»: TCP-подключение к закрытому порту публичного DNS.
-# Живая сеть -> RST приходит мгновенно (rc=1); мёртвая сеть -> timeout (rc=124).
+# «Интернет за модемом»: TCP-подключение к целям PROBE_HOSTS (host:port, через пробел).
+# Цель жива, если соединение завершилось: закрытый порт даёт RST (rc=1),
+# открытый (например host:443) - устанавливается (rc=0); мёртвая сеть -> timeout (rc=124).
 external_ok() {
     local t rc
-    for t in "8.8.8.8:9" "1.1.1.1:9" "9.9.9.9:9"; do
+    for t in $PROBE_HOSTS; do
         timeout "$PROBE_TIMEOUT" bash -c "exec 3<>/dev/tcp/${t%:*}/${t#*:}" 2>/dev/null
         rc=$?
-        [ "$rc" -eq 1 ] && return 0
+        if [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; then
+            return 0
+        fi
     done
     return 1
 }
@@ -497,6 +501,11 @@ CHECK_INTERVAL=60
 FAIL_THRESHOLD=5
 # Таймаут одного TCP-проба, сек
 PROBE_TIMEOUT=4
+# Цели TCP-проб host:port (через пробел). Закрытый порт даёт RST,
+# открытый (host:443) - устанавливает соединение; оба = жива.
+# Если egress режет TCP:9 - используйте открытый порт или
+# внутренний шлюз VPN-туннеля (host:9).
+PROBE_HOSTS=8.8.8.8:9 1.1.1.1:9 9.9.9.9:9
 # Пауза после ступени восстановления перед повторной проверкой, сек
 RESET_WAIT=120
 # Кулдаун между вмешательствами, сек (переживает reboot - файл состояния в /var/lib)
