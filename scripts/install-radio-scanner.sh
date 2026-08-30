@@ -24,6 +24,8 @@
 #   SKIP_AIRBAND=1      пропустить rtl_airband
 #   SKIP_WEBPANEL=1     пропустить WebPanel
 #   SKIP_WATCHDOG=1     пропустить usb4g-watchdog
+#   WATCHDOG_IFACE      интерфейс для мониторинга (default: usb0 или интерфейс default-маршрута)
+#   WATCHDOG_GW         шлюз (default: шлюз default-маршрута; для usb0 без маршрута - 192.168.88.1)
 
 set -euo pipefail
 
@@ -45,7 +47,7 @@ WEBPANEL_APP_DIR="/opt/rtl-sdr-airband-webpanel"
 log() { echo "[install] $*"; }
 die() { echo "[install] ERROR: $*" >&2; exit 1; }
 
-usage() { sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
+usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
 case "${1:-}" in
     -h|--help) usage ;;
 esac
@@ -198,8 +200,118 @@ install_webpanel() {
     fi
 }
 
+# --- usb4g-watchdog: выбор интерфейса/шлюза ---
+
+# Устройство/шлюз default-маршрута (пусто, если маршрута нет)
+defroute_dev() {
+    ip -4 -o route show default 2>/dev/null | head -n1 |
+        awk '{ for (i = 1; i < NF; i++) if ($i == "dev") { print $(i+1); exit } }' || true
+}
+
+defroute_gw() {
+    ip -4 -o route show default 2>/dev/null | head -n1 |
+        awk '{ for (i = 1; i < NF; i++) if ($i == "via") { print $(i+1); exit } }' || true
+}
+
+# Шлюз для выбранного интерфейса: default-маршрут (если он на этом интерфейсе),
+# иначе первый via по маршрутам интерфейса; для usb0 без маршрутов - RNDIS-дефолт.
+# Пустой результат = шлюз не определён (установка watchdog пропускается).
+watchdog_gw_for() {
+    local iface="$1" dev gw
+    dev="$(defroute_dev)"
+    gw="$(defroute_gw)"
+    if [ "$dev" = "$iface" ] && [ -n "$gw" ]; then
+        printf '%s' "$gw"
+        return 0
+    fi
+    gw="$(ip -4 -o route show 2>/dev/null | awk -v d="dev $iface" '$0 ~ d { for (i = 1; i < NF; i++) if ($i == "via") { print $(i+1); exit } }')" || true
+    if [ -n "$gw" ]; then
+        printf '%s' "$gw"
+        return 0
+    fi
+    if [ "$iface" = "usb0" ]; then
+        printf '192.168.88.1'
+    fi
+    return 0
+}
+
+# Автовыбор: usb0 (4G-модем), если есть, иначе интерфейс default-маршрута
+auto_watchdog_iface() {
+    if [ -d /sys/class/net/usb0 ]; then
+        printf 'usb0'
+    else
+        defroute_dev
+    fi
+}
+
+# Интерфейс для watchdog: WATCHDOG_IFACE > (TTY: выбор из списка) > авто.
+# Выбранный интерфейс - в stdout (функцию вызывают через $()), диагностика - в stderr.
+pick_watchdog_iface() {
+    local def n=0 choice dev oper mark
+    local candidates=()
+    mapfile -t candidates < <(ls /sys/class/net 2>/dev/null | grep -v '^lo$' | sort)
+    [ ${#candidates[@]} -gt 0 ] || return 1
+
+    if [ -n "${WATCHDOG_IFACE:-}" ]; then
+        echo "  Интерфейс (WATCHDOG_IFACE): $WATCHDOG_IFACE" >&2
+        printf '%s' "$WATCHDOG_IFACE"
+        return 0
+    fi
+
+    def="$(auto_watchdog_iface)"
+    [ -n "$def" ] || return 1
+
+    if [ -t 0 ]; then
+        echo "  Доступные интерфейсы (default: $def):" >&2
+        for dev in "${candidates[@]}"; do
+            n=$((n + 1))
+            oper="$(cat "/sys/class/net/$dev/operstate" 2>/dev/null || echo down)"
+            mark=""
+            if [ "$dev" = "$def" ]; then mark="  [default]"; fi
+            printf "   %d) %s [%s]%s\n" "$n" "$dev" "$oper" "$mark" >&2
+        done
+        read -r -p "  Интерфейс для watchdog [Enter = $def]: " choice || choice=""
+        case "$choice" in
+            '')
+                printf '%s' "$def"
+                ;;
+            [0-9]*)
+                if [ "$choice" -ge 1 ] && [ "$choice" -le "$n" ]; then
+                    printf '%s' "${candidates[$((choice - 1))]}"
+                else
+                    echo "  Нет такого номера - использую $def" >&2
+                    printf '%s' "$def"
+                fi
+                ;;
+            *)
+                if [ -d "/sys/class/net/$choice" ]; then
+                    printf '%s' "$choice"
+                else
+                    echo "  Нет такого интерфейса: $choice - использую $def" >&2
+                    printf '%s' "$def"
+                fi
+                ;;
+        esac
+    else
+        printf '%s' "$def"
+    fi
+}
+
 install_watchdog() {
     log "=== [3/3] usb4g-watchdog ==="
+
+    local wd_iface="" wd_gw=""
+    if [ ! -f /etc/default/usb4g-watchdog ]; then
+        wd_iface="$(pick_watchdog_iface)" || {
+            log "  WARN: интерфейс для watchdog не определен - не устанавливаю (явный пропуск: SKIP_WATCHDOG=1)"
+            return 0
+        }
+        wd_gw="${WATCHDOG_GW:-$(watchdog_gw_for "$wd_iface")}"
+        if [ -z "$wd_gw" ]; then
+            log "  WARN: шлюз для интерфейса $wd_iface не найден - не устанавливаю watchdog"
+            return 0
+        fi
+    fi
 
     log "  /usr/local/sbin/usb4g-watchdog.sh"
     cat > /usr/local/sbin/usb4g-watchdog.sh <<'WATCHDOG_EOF'
@@ -372,13 +484,13 @@ UNIT_EOF
     if [ -f /etc/default/usb4g-watchdog ]; then
         log "  /etc/default/usb4g-watchdog - уже существует, не трогаю"
     else
-        log "  /etc/default/usb4g-watchdog (новый)"
-        cat > /etc/default/usb4g-watchdog <<'DEFAULT_EOF'
+        log "  /etc/default/usb4g-watchdog (новый): IFACE=$wd_iface GW=$wd_gw"
+        cat > /etc/default/usb4g-watchdog <<DEFAULT_EOF
 # usb4g-watchdog: конфигурация (комментарии к параметрам - в /usr/local/sbin/usb4g-watchdog.sh)
-# RNDIS-интерфейс 4G-модема
-IFACE=usb0
-# Шлюз RNDIS-сети модема
-GW=192.168.88.1
+# Мониторингуемый интерфейс (4G RNDIS или иной uplink)
+IFACE=$wd_iface
+# Шлюз мониторингуемого интерфейса
+GW=$wd_gw
 # Интервал проверок, сек
 CHECK_INTERVAL=60
 # Сколько последовательных неудачных проверок до вмешательства
