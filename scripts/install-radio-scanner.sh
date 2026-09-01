@@ -331,6 +331,10 @@ install_watchdog() {
 #   2) USB-reset: remove USB-устройства RNDIS + unbind/rebind родительского хаба;
 #   3) reboot.
 #
+# Интерфейс может переименовать udev после reboot (порядок перечисления USB):
+# если текущий IFACE нездоров, интерфейс модема находится по шлюзу — сеть
+# модема всегда прямая (on-link), и ядро знает, на каком интерфейсе GW виден.
+#
 # Конфиг: /etc/default/usb4g-watchdog (EnvironmentFile).
 # Логи: stdout -> journal (journalctl -u usb4g-watchdog).
 
@@ -338,8 +342,6 @@ IFACE="${IFACE:-usb0}"
 GW="${GW:-192.168.88.1}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-60}"
 FAIL_THRESHOLD="${FAIL_THRESHOLD:-5}"
-PROBE_TIMEOUT="${PROBE_TIMEOUT:-4}"
-PROBE_HOSTS="${PROBE_HOSTS:-8.8.8.8:9 1.1.1.1:9 9.9.9.9:9}"
 PROBE_URLS="${PROBE_URLS:-https://api.ipify.org/?format=json https://ifconfig.co/ip}"
 PROBE_HTTP_TIMEOUT="${PROBE_HTTP_TIMEOUT:-8}"
 RESET_WAIT="${RESET_WAIT:-120}"
@@ -364,9 +366,7 @@ gw_ok() {
 }
 
 # «Интернет за модемом» — прямой трафик через IFACE (в обход VPN и прочей маршрутизации):
-#  1) HTTPS-запрос через curl к любому из PROBE_URLS (реальный ответ = канал жив);
-#  2) иначе TCP-пробы PROBE_HOSTS (host:port): закрытый порт -> RST (rc=1),
-#     открытый (host:443) -> connect (rc=0); timeout (rc=124) = мёртво.
+# HTTPS-запрос через curl к любому из PROBE_URLS — реальный ответ = канал жив.
 http_ok() {
     local u
     command -v curl >/dev/null 2>&1 || return 1
@@ -378,24 +378,24 @@ http_ok() {
     return 1
 }
 
-tcp_ok() {
-    local t rc
-    for t in $PROBE_HOSTS; do
-        timeout "$PROBE_TIMEOUT" bash -c "exec 3<>/dev/tcp/${t%:*}/${t#*:}" 2>/dev/null
-        rc=$?
-        if [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-external_ok() {
-    http_ok || tcp_ok
-}
-
 check_ok() {
-    iface_ok && gw_ok && external_ok
+    iface_ok && gw_ok && http_ok
+}
+
+# Интерфейс модема по шлюзу: сеть модема всегда прямая (on-link), поэтому
+# ядро знает, на каком интерфейсе виден GW — независимо от имени интерфейса
+# (udev может переименовать его после reboot) и драйвера модема.
+# Маршрут «via» другого шлюза (VPN) не принимается.
+iface_of_gw() {
+    local r dev
+    r="$(ip -4 route get "$GW" 2>/dev/null | head -n1)"
+    case "$r" in
+        "" | *"via "*) return 1 ;;
+    esac
+    dev="$(awk '{for (i = 1; i < NF; i++) if ($i == "dev") {print $(i + 1); exit}}' <<<"$r")"
+    [ -n "$dev" ] || return 1
+    [ "$(cat "/sys/class/net/$dev/carrier" 2>/dev/null)" = "1" ] || return 1
+    printf '%s' "$dev"
 }
 
 # --- восстановление ---
@@ -480,6 +480,15 @@ fails=0
 log "старт: iface=$IFACE gw=$GW interval=${CHECK_INTERVAL}s threshold=$FAIL_THRESHOLD vbus_reg=${VBUS_REG:-<не задан>}"
 
 while true; do
+    # udev может переименовать интерфейс модема после reboot (порядок
+    # перечисления): если текущий IFACE нездоров — найти интерфейс модема по шлюзу
+    if ! iface_ok; then
+        m="$(iface_of_gw)"
+        if [ -n "$m" ] && [ "$m" != "$IFACE" ]; then
+            log "интерфейс переименован: $IFACE -> $m (шлюз $GW виден на $m) - переключаюсь"
+            IFACE="$m"
+        fi
+    fi
     if check_ok; then
         [ "$fails" -gt 0 ] && log "канал восстановлен (было неудачных проверок: $fails)"
         fails=0
@@ -525,12 +534,6 @@ GW=$wd_gw
 CHECK_INTERVAL=60
 # Сколько последовательных неудачных проверок до вмешательства
 FAIL_THRESHOLD=5
-# Таймаут одного TCP-проба, сек
-PROBE_TIMEOUT=4
-# Цели TCP-проб host:port (через пробел, фолбэк, если HTTPS-проба не прошла).
-# Закрытый порт даёт RST, открытый (host:443) - connect; оба = жива.
-# Пусто - только HTTPS-пробы.
-PROBE_HOSTS=8.8.8.8:9 1.1.1.1:9 9.9.9.9:9
 # HTTPS-цели прямой пробы через IFACE (через пробел); любая успешная = жива.
 PROBE_URLS=https://api.ipify.org/?format=json https://ifconfig.co/ip
 # Таймаут одного HTTPS-запроса, сек
