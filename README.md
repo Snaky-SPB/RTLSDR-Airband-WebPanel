@@ -22,6 +22,24 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Snaky-SPB/RTLSDR-Airband-Web
 Скрипт соберёт и установит сканер `rtl_airband` (systemd-служба `rtl_airband`) и веб-панель.
 Параметры (репозитории, ветки, пропуск шагов): `scripts/install-radio-scanner.sh -h`.
 
+### Пропуск шагов установки (точечное обновление)
+
+Установка идёт тремя шагами: `rtl_airband` → веб-панель → `usb4g-watchdog`.
+Каждый шаг можно пропустить переменной окружения:
+
+| Переменная | Пропускает |
+|------------|------------|
+| `SKIP_AIRBAND=1` | сборку и установку `rtl_airband` |
+| `SKIP_WEBPANEL=1` | установку/обновление веб-панели |
+| `SKIP_WATCHDOG=1` | установку `usb4g-watchdog` |
+
+Пример — обновить только watchdog (скрипт и systemd-юнит перезаписываются,
+существующий `/etc/default/usb4g-watchdog` не трогается):
+
+```bash
+SKIP_AIRBAND=1 SKIP_WEBPANEL=1 bash <(curl -fsSL https://raw.githubusercontent.com/Snaky-SPB/RTLSDR-Airband-WebPanel/main/scripts/install-radio-scanner.sh)
+```
+
 ### Установка только веб-панели (на существующей системе)
 
 ```bash
